@@ -1,0 +1,7 @@
+ARG_ENABLE('vrzno', 'vrzno support', 'no');
+
+if (PHP_VRZNO != 'no') {
+	AC_DEFINE('HAVE_VRZNO', 1, 'vrzno support enabled');
+
+	EXTENSION('vrzno', 'vrzno.c', null, '/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1');
+}
