@@ -38,23 +38,30 @@ At the moment, the only exposed functions are vrzno_run($funcName, $args) & vrzn
 
 There are plans in the works for `vrzno_set($varname, $value)`, `vrzno_get($varname)`, and `vrzno_select($namespace)`.
 
-## Compiling (incomplete)
+## Compiling with PHP 7.4
 
 ```bash
+
+# Enter your home dir (or wherever you'd like to work on the project)
+cd ~
+
 # Clone the PHP Repo
-git clone https://github.com/php/php-src.git;
+git clone https://github.com/php/php-src.git
 
 # Enter the extension directory
-cd php-src/ext;
-
+pushd php-src/ext
 
 # Clone the VRZNO repo into the PHP source tree
-git clone https://github.com/seanmorris/vrzno.git;
+git clone https://github.com/seanmorris/vrzno.git
 
-cd vrzno;
+# Return to the project root
+popd
 
-rm configure        # Remove the configure script if any exists
-./buildconf --force # Rebuild the configuration script
+# Remove the configure script if any exists
+rm configure
+
+# Rebuild the configuration script
+./buildconf --force
 
 # Run the new configuration script via emscripten.
 emconfigure \
@@ -80,6 +87,23 @@ emconfigure \
 # Run the make scripts with emscripten.
 emmake make -j8
 
-#
+# Compile with EMCC
+
+emcc -O3 \
+  --llvm-lto 2 \
+  -s ENVIRONMENT=web \
+  -s EXPORTED_FUNCTIONS='["_pib_init", "_pib_destroy", "_pib_eval" "_pib_refresh", "_main", "_php_embed_init", "_php_embed_shutdown", "_php_embed_shutdown", "_zend_eval_string"]' \
+  -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "UTF8ToString", "lengthBytesUTF8"]' \
+  -s MODULARIZE=1 \
+  -s EXPORT_NAME="'PHP'" \
+  -s TOTAL_MEMORY=134217728 \
+  -s ASSERTIONS=0 \
+  -s INVOKE_RUN=0 \
+  -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
+    libs/libphp7.a pib_eval.o -o out/php.js
+
+# Check that the files were built:
+
+ls -al out/
 
 ```
