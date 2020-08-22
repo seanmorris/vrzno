@@ -19,35 +19,6 @@
 	ZEND_PARSE_PARAMETERS_END()
 #endif
 
-/* {{{ void vrzno_test1()
- */
-PHP_FUNCTION(vrzno_test1)
-{
-	ZEND_PARSE_PARAMETERS_NONE();
-
-	php_printf("The extension %s is loaded and working!\r\n", "vrzno");
-}
-/* }}} */
-
-/* {{{ string vrzno_test2( [ string $var ] )
- */
-PHP_FUNCTION(vrzno_test2)
-{
-	char *var = "World";
-	size_t var_len = sizeof("World") - 1;
-	zend_string *retval;
-
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_STRING(var, var_len)
-	ZEND_PARSE_PARAMETERS_END();
-
-	retval = strpprintf(0, "Hello %s", var);
-
-	RETURN_STR(retval);
-}
-/* }}}*/
-
 /* {{{ string vrzno_eval( [ string $js_code ] )
  */
 PHP_FUNCTION(vrzno_eval)
@@ -87,8 +58,6 @@ EM_JS(char *, call_js_func, (const char *func_name, const char *func_args), {
 
 	const funcName = UTF8ToString(func_name);
 	const argJson  = UTF8ToString(func_args);
-
-	console.log(funcName, argJson);
 
 	const func     = window[funcName];
 	const args     = JSON.parse(argJson || '[]') || [];
@@ -162,13 +131,6 @@ PHP_MINFO_FUNCTION(vrzno)
 
 /* {{{ arginfo
  */
-ZEND_BEGIN_ARG_INFO(arginfo_vrzno_test1, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_INFO(arginfo_vrzno_test2, 0)
-	ZEND_ARG_INFO(0, str)
-ZEND_END_ARG_INFO()
-
 ZEND_BEGIN_ARG_INFO(arginfo_vrzno_eval, 0)
 	ZEND_ARG_INFO(0, str)
 ZEND_END_ARG_INFO()
@@ -181,8 +143,6 @@ ZEND_END_ARG_INFO()
 /* {{{ vrzno_functions[]
  */
 static const zend_function_entry vrzno_functions[] = {
-	PHP_FE(vrzno_test1,		arginfo_vrzno_test1)
-	PHP_FE(vrzno_test2,		arginfo_vrzno_test2)
 	PHP_FE(vrzno_eval,		arginfo_vrzno_eval)
 	PHP_FE(vrzno_run,		arginfo_vrzno_run)
 	PHP_FE_END
