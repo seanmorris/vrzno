@@ -12,4 +12,6 @@ extern zend_module_entry vrzno_module_entry;
 ZEND_TSRMLS_CACHE_EXTERN()
 # endif
 
+extern PHPAPI int vrzno_exec_callback(zend_function *fptr);
+
 #endif	/* PHP_VRZNO_H */
