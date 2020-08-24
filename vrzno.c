@@ -80,8 +80,6 @@ PHP_FUNCTION(vrzno_run)
 
 	smart_str_0(&buf);
 
-	// char *js_ret  = call_js_func(js_funcname, js_args);
-
 	char *js_ret = EM_ASM_INT({
 
 		const funcName = UTF8ToString($0);
