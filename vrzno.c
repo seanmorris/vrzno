@@ -98,7 +98,6 @@ PHP_FUNCTION(vrzno_run)
 
 	}, js_funcname, js_args);
 
-
 	retval = strpprintf(0, "%s", js_ret);
 
 	free(js_ret);
@@ -107,6 +106,8 @@ PHP_FUNCTION(vrzno_run)
 }
 /* }}}*/
 
+zend_class_entry *vrzno_class_entry;
+zend_object_handlers vrzno_object_handlers;
 
 /* {{{ string vrzno_timeout( [ string $timeout, $callback ] )
  */
@@ -114,25 +115,21 @@ PHP_FUNCTION(vrzno_timeout)
 {
 
 	zend_fcall_info fci;
-	zend_fcall_info_cache fci_cache;
+	zend_fcall_info_cache fcc;
 
 	char   *timeout     = "";
 	size_t  timeout_len = sizeof(timeout) - 1;
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_STRING(timeout, timeout_len)
-		Z_PARAM_FUNC(fci, fci_cache)
+		Z_PARAM_FUNC(fci, fcc)
 	ZEND_PARSE_PARAMETERS_END();
-
-	EM_ASM({ console.log($0, $1) }, &fci, &fci_cache);
 
 	EM_ASM({
 		const timeout  = Number(UTF8ToString($0));
 		const funcPtr  = $1;
 
 		setTimeout(()=>{
-			console.log(timeout, funcPtr);
-
 			Module.ccall(
 				'exec_callback'
 				, 'number'
@@ -149,16 +146,159 @@ PHP_FUNCTION(vrzno_timeout)
 
 		}, timeout);
 
-	}, timeout, fci_cache.function_handler);
+	}, timeout, fcc.function_handler);
 
-	GC_ADDREF(ZEND_CLOSURE_OBJECT(fci_cache.function_handler));
+	GC_ADDREF(ZEND_CLOSURE_OBJECT(fcc.function_handler));
 }
 /* }}}*/
 
+typedef struct {
+	zend_object std;
+	long        targetId;
+} vrzno_object;
+
+vrzno_object *vrzno_create_object(zend_class_entry *class_type)
+{
+    vrzno_object *retval = zend_object_alloc(sizeof(vrzno_object), class_type);
+
+    zend_object_std_init(retval, class_type);
+
+    retval->std.handlers = &vrzno_object_handlers;
+    retval->targetId     = 0;
+
+    return retval;
+}
+
+zval *vrzno_read_property(zval *object, zval *member, int type, void **cache_slot, zval *rv)
+{
+	zend_string  *name     = zval_get_string(member);
+	vrzno_object *vrzno    = object->value.obj;
+	long          targetId = vrzno->targetId;
+
+	char *scalar_result = EM_ASM_INT({
+
+		const target   = Module.targets.get($0) || window;
+
+		const property = UTF8ToString($1);
+		const result = target[property];
+
+		console.log('target/prop:', $0, target, property, typeof result, result);
+
+		if(!result || !['function','object'].includes(typeof result))
+		{
+			const jsRet    = 'OK' + String(result);
+			const len      = lengthBytesUTF8(jsRet) + 1;
+			const strLoc   = _malloc(len);
+
+			stringToUTF8(jsRet, strLoc, len);
+
+			return strLoc;
+		}
+
+		const jsRet    = 'XX';
+		const len      = lengthBytesUTF8(jsRet) + 1;
+		const strLoc   = _malloc(len);
+
+		stringToUTF8(jsRet, strLoc, len);
+
+		return strLoc;
+
+	}, targetId, &name->val);
+
+	if(strlen(scalar_result) > 1 && *scalar_result == 'O')
+	{
+		ZVAL_STRING(rv, scalar_result + 2);
+		free(scalar_result);
+		return rv;
+	}
+
+	int obj_result = EM_ASM_INT({
+
+		const target   = Module.targets.get($0) || window;
+		const property = UTF8ToString($1);
+		const result   = target[property];
+
+		console.log('target/prop:', $0, target, property, typeof result, result);
+
+		if(['function','object'].includes(typeof result))
+		{
+			let index = Module.targets.has(result);
+
+			if(!index)
+			{
+				index = Module.targets.add(result);
+			}
+
+			console.log(index);
+
+			return index;
+		}
+
+		console.log(0);
+
+		return 0;
+
+	}, targetId, &name->val);
+
+	if(!obj_result)
+	{
+		ZVAL_BOOL(rv, obj_result);
+
+		return rv;
+	}
+
+	vrzno_object *retObj = zend_object_alloc(sizeof(vrzno_object), vrzno_class_entry);
+    retObj->targetId = obj_result;
+
+    zend_object_std_init(retObj, vrzno_class_entry);
+
+    retObj->std.handlers = &vrzno_object_handlers;
+
+	ZVAL_OBJ(rv, retObj);
+	return rv;
+
+}
+
+int vrzno_call_method(zend_string *method, zend_object *object, INTERNAL_FUNCTION_PARAMETERS)
+{
+
+}
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_addeventlistener, 0, 0, 2)
+	ZEND_ARG_INFO(0, eventName)
+	ZEND_ARG_INFO(0, callback)
+	ZEND_ARG_INFO(1, options)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_removeeventlistener, 0, 0, 1)
+	ZEND_ARG_INFO(0, callbackId)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_queryselector, 0, 0, 1)
+	ZEND_ARG_INFO(0, selector)
+ZEND_END_ARG_INFO()
+
 /* {{{ PHP_RINIT_FUNCTION
  */
+static const zend_function_entry vrzno_vrzno_methods[] = {
+	PHP_ME(Vrzno, addeventlistener,    arginfo_addeventlistener, ZEND_ACC_PUBLIC)
+	PHP_ME(Vrzno, removeeventlistener, arginfo_removeeventlistener, ZEND_ACC_PUBLIC)
+	PHP_ME(Vrzno, queryselector, arginfo_queryselector, ZEND_ACC_PUBLIC)
+	PHP_FE_END
+};
+
 PHP_RINIT_FUNCTION(vrzno)
 {
+	zend_class_entry ce;
+
+	INIT_CLASS_ENTRY(ce, "Vrzno", vrzno_vrzno_methods);
+	vrzno_class_entry = zend_register_internal_class(&ce);
+	vrzno_class_entry->create_object = vrzno_create_object;
+
+	memcpy(&vrzno_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
+
+ 	vrzno_object_handlers.read_property = vrzno_read_property;
+
 #if defined(ZTS) && defined(COMPILE_DL_VRZNO)
 	ZEND_TSRMLS_CACHE_UPDATE();
 #endif
@@ -195,11 +335,12 @@ ZEND_END_ARG_INFO()
 /* {{{ vrzno_functions[]
  */
 static const zend_function_entry vrzno_functions[] = {
-	PHP_FE(vrzno_eval,		arginfo_vrzno_eval)
-	PHP_FE(vrzno_run,		arginfo_vrzno_run)
-	PHP_FE(vrzno_timeout,	arginfo_vrzno_timeout)
+	PHP_FE(vrzno_eval,    arginfo_vrzno_eval)
+	PHP_FE(vrzno_run,     arginfo_vrzno_run)
+	PHP_FE(vrzno_timeout, arginfo_vrzno_timeout)
 	PHP_FE_END
 };
+
 /* }}} */
 
 /* {{{ vrzno_module_entry
@@ -230,14 +371,14 @@ int vrzno_exec_callback(zend_function *fptr)
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
 
-	zval *params;
+	zval params;
 	zval retval;
 
 	fci.size             = sizeof(fci);
 	ZVAL_UNDEF(&fci.function_name);
 	fci.object           = NULL;
 	fci.retval           = &retval;
-	fci.params           = params;
+	fci.params           = &params;
 	fci.param_count      = 0;
 	fci.no_separation    = 1;
 
@@ -245,14 +386,14 @@ int vrzno_exec_callback(zend_function *fptr)
 	fcc.called_scope     = NULL;
 	fcc.object           = NULL;
 
-	if (zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF) {
+	if(zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF)
+	{
 
-		return 0;
 		// if (Z_ISREF(retval)) {
 		// 	zend_unwrap_reference(&retval);
 		// }
-
 		// ZVAL_COPY_VALUE(return_value, &retval);
+		return 0;
 	}
 
 	return 1;
@@ -262,4 +403,146 @@ int vrzno_del_callback(zend_function *fptr)
 {
 	GC_DELREF(ZEND_CLOSURE_OBJECT(fptr));
 	return 0;
+}
+
+// static PHP_METHOD(Vrzno, __construct)
+// {
+// }
+
+// static PHP_METHOD(Vrzno, __set)
+// {
+
+// }
+
+// static PHP_METHOD(Vrzno, __call)
+// {
+// 	int char *retVal = EM_ASM_INT({
+
+// 		// if(typeof)
+
+// 	});
+// }
+
+PHP_METHOD(Vrzno, addeventlistener)
+{
+	zval         *object         = getThis();
+	vrzno_object *vrzno          = object->value.obj;
+	long          targetId       = vrzno->targetId;
+	char         *event_name     = "";
+	size_t        event_name_len = sizeof(event_name) - 1;
+	zval         *options;
+
+	zend_fcall_info       fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_STRING(event_name, event_name_len)
+		Z_PARAM_FUNC(fci, fcc)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ARRAY(options)
+	ZEND_PARSE_PARAMETERS_END();
+
+	GC_ADDREF(ZEND_CLOSURE_OBJECT(fcc.function_handler));
+
+	int callbackId = EM_ASM_INT({
+
+		const target    = Module.targets.get($0) || window;
+		const eventName = UTF8ToString($1);
+		const funcPtr   = $2;
+		const options   = {};
+
+		const callback  = () => {
+			Module.ccall(
+				'exec_callback'
+				, 'number'
+				, ["number"]
+				, [funcPtr]
+			);
+		};
+
+		target.addEventListener(eventName, callback, options);
+
+		const remover = () => {
+			target.removeEventListener(eventName, callback, options);
+			return $2;
+		};
+
+		return Module.callbacks.add(remover);
+
+	}, targetId, event_name, fcc.function_handler);
+
+	RETURN_LONG(callbackId);
+}
+
+static PHP_METHOD(Vrzno, removeeventlistener)
+{
+	int callbackId;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_LONG(callbackId)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_function *fptr = EM_ASM_INT({
+
+		const remover = Module.callbacks.get($0);
+
+		return remover();
+
+	}, callbackId);
+
+	if(fptr)
+	{
+		GC_DELREF(ZEND_CLOSURE_OBJECT(fptr));
+	}
+}
+
+static PHP_METHOD(Vrzno, queryselector)
+{
+	zval         *object         = getThis();
+	vrzno_object *vrzno          = object->value.obj;
+	long          targetId       = vrzno->targetId;
+	char         *query_selector = "";
+	size_t        query_selector_len = sizeof(query_selector) - 1;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STRING(query_selector, query_selector_len)
+	ZEND_PARSE_PARAMETERS_END();
+
+	int obj_result = EM_ASM_INT({
+
+		const target        = Module.targets.get($0) || document;
+		const querySelector = UTF8ToString($1);
+
+		const result        = target.querySelector(querySelector);
+
+		if(!result)
+		{
+			return 0;
+		}
+
+		let index = Module.targets.has(result) || 0;
+
+		if(!index)
+		{
+			index = Module.targets.add(result);
+		}
+
+		return index;
+
+	}, targetId, query_selector);
+
+	if(!obj_result)
+	{
+		RETURN_BOOL(0);
+		return;
+	}
+
+	vrzno_object *retObj = zend_object_alloc(sizeof(vrzno_object), vrzno_class_entry);
+    retObj->targetId = obj_result;
+
+    zend_object_std_init(retObj, vrzno_class_entry);
+
+    retObj->std.handlers = &vrzno_object_handlers;
+
+    RETURN_OBJ(retObj);
 }
