@@ -380,7 +380,7 @@ int vrzno_exec_callback(zend_function *fptr)
 	fci.retval           = &retval;
 	fci.params           = &params;
 	fci.param_count      = 0;
-	fci.no_separation    = 1;
+	// fci.no_separation    = 1;
 
 	fcc.function_handler = fptr;
 	fcc.called_scope     = NULL;
