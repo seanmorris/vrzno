@@ -22,14 +22,13 @@
 
 /* {{{ string vrzno_eval( [ string $js_code ] )
  */
-PHP_FUNCTION(vrzno_eval)
+static PHP_FUNCTION(vrzno_eval)
 {
 	zend_string *retval;
 	char   *js_code = "";
 	size_t  js_code_len = sizeof(js_code) - 1;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_OPTIONAL
 		Z_PARAM_STRING(js_code, js_code_len)
 	ZEND_PARSE_PARAMETERS_END();
 
@@ -54,7 +53,7 @@ PHP_FUNCTION(vrzno_eval)
 
 /* {{{ string vrzno_run( [ string $js_func, $js_argv ] )
  */
-PHP_FUNCTION(vrzno_run)
+static PHP_FUNCTION(vrzno_run)
 {
 	zend_string      *retval;
 	php_json_encoder  encoder;
