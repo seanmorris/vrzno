@@ -15,8 +15,13 @@ ZEND_TSRMLS_CACHE_EXTERN()
 extern PHPAPI int vrzno_exec_callback(zend_function *fptr);
 extern PHPAPI int vrzno_del_callback(zend_function *fptr);
 
-static PHP_METHOD(Vrzno, addeventlistener);
-static PHP_METHOD(Vrzno, removeeventlistener);
-static PHP_METHOD(Vrzno, queryselector);
+PHP_FUNCTION(vrzno_eval);
+PHP_FUNCTION(vrzno_run);
+PHP_FUNCTION(vrzno_timeout);
+
+PHP_METHOD(Vrzno, addeventlistener);
+PHP_METHOD(Vrzno, removeeventlistener);
+PHP_METHOD(Vrzno, queryselector);
+PHP_METHOD(Vrzno, __call);
 
 #endif	/* PHP_VRZNO_H */
