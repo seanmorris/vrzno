@@ -12,6 +12,7 @@
 #include "../json/php_json.h"
 #include "../json/php_json_encoder.h"
 #include "../json/php_json_parser.h"
+#include "zend_API.h"
 #include "zend_closures.h"
 #include <emscripten.h>
 #include "zend_attributes.h"
@@ -136,8 +137,8 @@ PHP_FUNCTION(vrzno_timeout)
 	ZEND_PARSE_PARAMETERS_END();
 
 	EM_ASM({
-		const timeout  = Number(UTF8ToString($0));
-		const funcPtr  = $1;
+		const timeout = Number(UTF8ToString($0));
+		const funcPtr = $1;
 
 		setTimeout(()=>{
 			Module.ccall(
@@ -177,7 +178,7 @@ PHP_FUNCTION(vrzno_timeout)
 static vrzno_object *vrzno_create_object(zend_class_entry *class_type)
 {
     vrzno_object *intern = zend_object_alloc(sizeof(vrzno_object), class_type);
-    intern->targetId     = 0;
+    intern->targetId     = EM_ASM_INT({ return Module.targets.add(globalThis); });
 
     zend_object_std_init(&intern->zo, class_type);
 
@@ -233,7 +234,7 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 		const property = UTF8ToString($1);
 		const result   = target[property];
 
-		console.log('READING', {target, property, result});
+		console.log('READING', {aa: $0, target, property, result});
 
 		if(['function','object'].includes(typeof result))
 		{
@@ -279,13 +280,36 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 	EM_ASM({ (() =>{
 		const target = Module.targets.get($0) || globalThis;
 		const property = UTF8ToString($1);
-		console.log('WRITING', {target, property});
-	})() }, targetId, name);
+		const newValue = $2;
+		console.log('WRITING', {aa: $0, target, property, newValue});
+	})() }, targetId, name, newValue);
+	
+	zend_fcall_info_cache fcc;
+	char *function_name = NULL;
+	char *errstr = NULL;
 
-	php_var_dump(newValue, 1);
+	if(zend_is_callable_ex(newValue, NULL, 0, &function_name, &fcc, &errstr))
+	{
+		EM_ASM({ (() =>{
+			const target   = Module.targets.get($0) || globalThis;
+			const property = UTF8ToString($1);
+			const funcPtr  = $2;
+			console.log('WRITING FUNCTION', {aa: $0, target, property, funcPtr});
+			target[property] = (...args) => {
+				console.log('CALLING FUNCTION', funcPtr, {Module});
+				Module.ccall(
+					'exec_callback'
+					, 'number'
+					, ["number"]
+					, [funcPtr]
+				);
+			};
+		})() }, targetId, name, fcc.function_handler);
+
+		return newValue;
+	}
 
 	switch (Z_TYPE_P(newValue)) {
-
 		case IS_UNDEF:
 			EM_ASM({ (() =>{
 				const target = Module.targets.get($0) || globalThis;
@@ -342,8 +366,9 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 				target[property] = newValue;
 			})() }, targetId, name, Z_STRVAL_P(newValue));
 			break;
-
 	}
+
+	return newValue;
 }
 
 void vrzno_unset_property(zend_object *object, zend_string *member, void **cache_slot)
@@ -373,9 +398,14 @@ static HashTable *vrzno_get_properties_for(zend_object *object, zend_prop_purpos
 
 		const target = Module.targets.get($0) || globalThis;
 
-		console.log('SCANNING', {target});
+		if(typeof target === 'function')
+		{
+			return '{}';
+		}
 
-		const jsRet  = JSON.stringify(target);
+		console.log('SCANNING', {aa: $0, target});
+
+		const jsRet  = String(JSON.stringify(target));
 		const len    = lengthBytesUTF8(jsRet) + 1;
 		const strLoc = _malloc(len);
 
@@ -564,6 +594,8 @@ int vrzno_exec_callback(zend_function *fptr)
 	fcc.called_scope     = NULL;
 	fcc.object           = NULL;
 
+	EM_ASM({ console.log($0, $1) }, &fci, &fcc);
+
 	if(zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF)
 	{
 
@@ -709,10 +741,6 @@ PHP_METHOD(Vrzno, queryselector)
 
 PHP_METHOD(Vrzno, __call)
 {
-	zend_string      *retval;
-	php_json_encoder  encoder;
-	zend_long         opt = 0;
-
 	zval         *object   = getThis();
 	vrzno_object *vrzno    = object->value.obj;
 	long          targetId = vrzno->targetId;
@@ -726,11 +754,12 @@ PHP_METHOD(Vrzno, __call)
 		Z_PARAM_ARRAY(js_argv)
 	ZEND_PARSE_PARAMETERS_END();
 
+	php_json_encoder  encoder;
 	smart_str buf = {0};
 
 	php_json_encode_init(&encoder);
 	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
-	php_json_encode_zval(&buf, js_argv, opt, &encoder);
+	php_json_encode_zval(&buf, js_argv, 0, &encoder);
 
 	char *js_args = ZSTR_VAL(buf.s);
 
@@ -744,6 +773,8 @@ PHP_METHOD(Vrzno, __call)
 
 		const args     = JSON.parse(argJson || '[]') || [];
 
+		console.log('CALLING', {aa: $0, target, method_name, args});
+
 		const jsRet    = String(target[method_name](...args));
 		const len      = lengthBytesUTF8(jsRet) + 1;
 		const strLoc   = _malloc(len);
@@ -753,6 +784,8 @@ PHP_METHOD(Vrzno, __call)
 		return strLoc;
 
 	}, targetId, js_method_name, js_args);
+
+	zend_string *retval;
 
 	retval = strpprintf(0, "%s", js_ret);
 
