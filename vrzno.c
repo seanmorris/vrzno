@@ -175,13 +175,12 @@ PHP_FUNCTION(vrzno_timeout)
 // vrzno_get_constructor
 // vrzno_
 
-static vrzno_object *vrzno_create_object(zend_class_entry *class_type)
+static struct _zend_object *vrzno_create_object(zend_class_entry *class_type)
 {
     vrzno_object *intern = zend_object_alloc(sizeof(vrzno_object), class_type);
-    intern->targetId     = EM_ASM_INT({ return Module.targets.add(globalThis); });
-
     zend_object_std_init(&intern->zo, class_type);
 
+    intern->targetId     = EM_ASM_INT({ return Module.targets.add(globalThis); });
     intern->zo.handlers = &vrzno_object_handlers;
 
     return &intern->zo;
@@ -192,6 +191,8 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 	char         *name     = ZSTR_VAL(member);
 	vrzno_object *vrzno    = vrzno_fetch_object(object);
 	long          targetId = vrzno->targetId;
+
+	EM_ASM({ console.log($0) }, targetId);
 
 	char *scalar_result = EM_ASM_INT({
 
@@ -228,6 +229,8 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 		return rv;
 	}
 
+	free(scalar_result);
+
 	int obj_result = EM_ASM_INT({
 
 		const target   = Module.targets.get($0) || globalThis;
@@ -245,6 +248,8 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 				index = Module.targets.add(result);
 			}
 
+			console.log({index, result});
+
 			return index;
 		}
 
@@ -259,14 +264,17 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 		return rv;
 	}
 
-	vrzno_object *intern = zend_object_alloc(sizeof(vrzno_object), vrzno_class_entry);
-    intern->targetId     = obj_result;
+	EM_ASM({ console.log($0) }, obj_result);
 
-    zend_object_std_init(&intern->zo, vrzno_class_entry);
+	zend_object *retZObj = zend_object_alloc(sizeof(vrzno_object), vrzno_class_entry);
+    zend_object_std_init(retZObj, vrzno_class_entry);
 
-    intern->zo.handlers = &vrzno_object_handlers;
+	vrzno_object *retVrzno = vrzno_fetch_object(retZObj);
 
-	ZVAL_OBJ(rv, &intern->zo);
+    retVrzno->zo.handlers = &vrzno_object_handlers;
+    retVrzno->targetId = obj_result;
+
+	ZVAL_OBJ(rv, &retVrzno->zo);
 	return rv;
 
 }
@@ -285,10 +293,9 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 	})() }, targetId, name, newValue);
 	
 	zend_fcall_info_cache fcc;
-	char *function_name = NULL;
 	char *errstr = NULL;
 
-	if(zend_is_callable_ex(newValue, NULL, 0, &function_name, &fcc, &errstr))
+	if(zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr))
 	{
 		EM_ASM({ (() =>{
 			const target   = Module.targets.get($0) || globalThis;
@@ -296,7 +303,7 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 			const funcPtr  = $2;
 			console.log('WRITING FUNCTION', {aa: $0, target, property, funcPtr});
 			target[property] = (...args) => {
-				console.log('CALLING FUNCTION', funcPtr, {Module});
+				console.log('CALLING FUNCTION', funcPtr, {targets: Module.targets});
 				Module.ccall(
 					'exec_callback'
 					, 'number'
@@ -392,20 +399,22 @@ static HashTable *vrzno_get_properties_for(zend_object *object, zend_prop_purpos
 	vrzno_object *vrzno = vrzno_fetch_object(object);
 	long       targetId = vrzno->targetId;
 
-	HashTable *props;
-
 	char *js_ret = EM_ASM_INT({
 
 		const target = Module.targets.get($0) || globalThis;
 
 		if(typeof target === 'function')
 		{
-			return '{}';
+			json = '{}';
+		}
+		else
+		{
+			json = JSON.stringify(target);
 		}
 
 		console.log('SCANNING', {aa: $0, target});
 
-		const jsRet  = String(JSON.stringify(target));
+		const jsRet  = String(json);
 		const len    = lengthBytesUTF8(jsRet) + 1;
 		const strLoc = _malloc(len);
 
@@ -418,9 +427,11 @@ static HashTable *vrzno_get_properties_for(zend_object *object, zend_prop_purpos
 	}, targetId);
 
 	php_json_parser parser;
-	zval           *js_object;
+	zval            js_object;
 
-	php_json_parser_init(&parser, js_object, js_ret, sizeof(js_ret), PHP_JSON_OBJECT_AS_ARRAY, PHP_JSON_PARSER_DEFAULT_DEPTH);
+	array_init(&js_object);
+
+	php_json_parser_init(&parser, &js_object, js_ret, sizeof(js_ret), PHP_JSON_OBJECT_AS_ARRAY, PHP_JSON_PARSER_DEFAULT_DEPTH);
 
 	free(js_ret);
 
@@ -429,7 +440,7 @@ static HashTable *vrzno_get_properties_for(zend_object *object, zend_prop_purpos
 		// FAIL
 	}
 
-	return Z_ARR_P(js_object);
+	return Z_ARR(js_object);
 }
 
 int vrzno_has_property(zend_object *object, zend_string *member, int has_set_exists, void **cache_slot)
@@ -470,18 +481,19 @@ ZEND_END_ARG_INFO()
 // 	ZEND_ARG_INFO(0, args)
 // ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo___get, 0, 0, 1)
-	ZEND_ARG_INFO(0, property_name)
-ZEND_END_ARG_INFO()
+// ZEND_BEGIN_ARG_INFO_EX(arginfo___get, 0, 0, 1)
+// 	ZEND_ARG_INFO(0, property_name)
+// ZEND_END_ARG_INFO()
 
 /* {{{ PHP_RINIT_FUNCTION
  */
 static const zend_function_entry vrzno_vrzno_methods[] = {
 	PHP_ME(Vrzno, addeventlistener,    arginfo_addeventlistener, ZEND_ACC_PUBLIC)
 	PHP_ME(Vrzno, removeeventlistener, arginfo_removeeventlistener, ZEND_ACC_PUBLIC)
+	PHP_ME(Vrzno, queryselector, arginfo_queryselector, ZEND_ACC_PUBLIC)
 	PHP_ME(Vrzno, __call, arginfo___call, ZEND_ACC_PUBLIC)
 	// PHP_ME(Vrzno, __set, arginfo___set, ZEND_ACC_PUBLIC)
-	PHP_ME(Vrzno, __get, arginfo___get, ZEND_ACC_PUBLIC)
+	// PHP_ME(Vrzno, __get, arginfo___get, ZEND_ACC_PUBLIC)
 	PHP_FE_END
 };
 
@@ -618,7 +630,8 @@ int vrzno_del_callback(zend_function *fptr)
 PHP_METHOD(Vrzno, addeventlistener)
 {
 	zval         *object         = getThis();
-	vrzno_object *vrzno          = object->value.obj;
+	zend_object  *zObject        = object->value.obj;
+	vrzno_object *vrzno =         vrzno_fetch_object(zObject);
 	long          targetId       = vrzno->targetId;
 	char         *event_name     = "";
 	size_t        event_name_len = sizeof(event_name) - 1;
@@ -691,7 +704,8 @@ PHP_METHOD(Vrzno, removeeventlistener)
 PHP_METHOD(Vrzno, queryselector)
 {
 	zval         *object         = getThis();
-	vrzno_object *vrzno          = object->value.obj;
+	zend_object  *zObject        = object->value.obj;
+	vrzno_object *vrzno =         vrzno_fetch_object(zObject);
 	long          targetId       = vrzno->targetId;
 	char         *query_selector = "";
 	size_t        query_selector_len = sizeof(query_selector) - 1;
@@ -719,6 +733,8 @@ PHP_METHOD(Vrzno, queryselector)
 			index = Module.targets.add(result);
 		}
 
+		console.log({index, result});
+
 		return index;
 
 	}, targetId, query_selector);
@@ -729,21 +745,25 @@ PHP_METHOD(Vrzno, queryselector)
 		return;
 	}
 
-	vrzno_object *retObj = zend_object_alloc(sizeof(vrzno_object), vrzno_class_entry);
-    retObj->targetId = obj_result;
+	zend_object *retZObj = zend_object_alloc(sizeof(vrzno_object), vrzno_class_entry);
+    zend_object_std_init(retZObj, vrzno_class_entry);
 
-    zend_object_std_init(retObj, vrzno_class_entry);
+	vrzno_object *retVrzno = vrzno_fetch_object(retZObj);
 
-    retObj->zo.handlers = &vrzno_object_handlers;
+    retVrzno->zo.handlers = &vrzno_object_handlers;
+    retVrzno->targetId = obj_result;
 
-    RETURN_OBJ(retObj);
+    RETURN_OBJ(retZObj);
 }
 
 PHP_METHOD(Vrzno, __call)
 {
 	zval         *object   = getThis();
-	vrzno_object *vrzno    = object->value.obj;
+	zend_object  *zObject        = object->value.obj;
+	vrzno_object *vrzno =         vrzno_fetch_object(zObject);
 	long          targetId = vrzno->targetId;
+
+	EM_ASM({ console.log($0) }, targetId);
 
 	char   *js_method_name     = "";
 	size_t  js_method_name_len = sizeof(js_method_name) - 1;
@@ -773,7 +793,7 @@ PHP_METHOD(Vrzno, __call)
 
 		const args     = JSON.parse(argJson || '[]') || [];
 
-		console.log('CALLING', {aa: $0, target, method_name, args});
+		console.log('CALLING', {aa: $0, target, method_name, args, targets: Module.targets});
 
 		const jsRet    = String(target[method_name](...args));
 		const len      = lengthBytesUTF8(jsRet) + 1;
@@ -793,6 +813,45 @@ PHP_METHOD(Vrzno, __call)
 
 	RETURN_STR(retval);
 }
+
+// PHP_METHOD(Vrzno, __get)
+// {
+// 	zend_string      *retval;
+
+// 	zval         *object   = getThis();
+// 	vrzno_object *vrzno    = object->value.obj;
+// 	long          targetId = vrzno->targetId;
+
+// 	char   *js_property_name     = "";
+// 	size_t  js_property_name_len = sizeof(js_property_name) - 1;
+
+// 	ZEND_PARSE_PARAMETERS_START(1, 1)
+// 		Z_PARAM_STRING(js_property_name, js_property_name_len)
+// 	ZEND_PARSE_PARAMETERS_END();
+
+// 	char *js_ret = EM_ASM_INT({
+
+// 		const target        = Module.targets.get($0) || globalThis;
+// 		const property_name = UTF8ToString($1);
+
+// 		target[property_name] = newValueJson;
+
+// 		const jsRet    = String(target[property_name]);
+// 		const len      = lengthBytesUTF8(jsRet) + 1;
+// 		const strLoc   = _malloc(len);
+
+// 		stringToUTF8(jsRet, strLoc, len);
+
+// 		return strLoc;
+
+// 	}, targetId, js_property_name);
+
+// 	retval = strpprintf(0, "%s", js_ret);
+
+// 	free(js_ret);
+
+// 	RETURN_STR(retval);
+// }
 
 // PHP_METHOD(Vrzno, __set)
 // {
@@ -849,43 +908,3 @@ PHP_METHOD(Vrzno, __call)
 
 // 	// RETURN_STR(retval);
 // }
-
-PHP_METHOD(Vrzno, __get)
-{
-	zend_string      *retval;
-	php_json_encoder  encoder;
-
-	zval         *object   = getThis();
-	vrzno_object *vrzno    = object->value.obj;
-	long          targetId = vrzno->targetId;
-
-	char   *js_property_name     = "";
-	size_t  js_property_name_len = sizeof(js_property_name) - 1;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STRING(js_property_name, js_property_name_len)
-	ZEND_PARSE_PARAMETERS_END();
-
-	char *js_ret = EM_ASM_INT({
-
-		const target        = Module.targets.get($0) || globalThis;
-		const property_name = UTF8ToString($1);
-
-		target[property_name] = newValueJson;
-
-		const jsRet    = String(target[property_name]);
-		const len      = lengthBytesUTF8(jsRet) + 1;
-		const strLoc   = _malloc(len);
-
-		stringToUTF8(jsRet, strLoc, len);
-
-		return strLoc;
-
-	}, targetId, js_property_name);
-
-	retval = strpprintf(0, "%s", js_ret);
-
-	free(js_ret);
-
-	RETURN_STR(retval);
-}
