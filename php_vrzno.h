@@ -23,7 +23,7 @@ PHP_METHOD(Vrzno, addeventlistener);
 PHP_METHOD(Vrzno, removeeventlistener);
 PHP_METHOD(Vrzno, queryselector);
 PHP_METHOD(Vrzno, __call);
-PHP_METHOD(Vrzno, __set);
 PHP_METHOD(Vrzno, __get);
+// PHP_METHOD(Vrzno, __set);
 
 #endif	/* PHP_VRZNO_H */
