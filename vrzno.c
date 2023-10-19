@@ -13,6 +13,7 @@
 #include "../json/php_json_encoder.h"
 #include "../json/php_json_parser.h"
 #include "zend_API.h"
+#include "zend_types.h"
 #include "zend_closures.h"
 #include <emscripten.h>
 #include "zend_attributes.h"
@@ -163,6 +164,8 @@ PHP_FUNCTION(vrzno_timeout)
 }
 /* }}}*/
 
+#include "vrzno_expose.c"
+
 static struct _zend_object *vrzno_create_object(zend_class_entry *class_type)
 {
     zend_object  *retZObj  = zend_object_alloc(sizeof(vrzno_object), class_type);
@@ -289,16 +292,20 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 		const newValue = $2;
 		console.log('WRITING', {aa: $0, target, property, newValue});
 	})() }, targetId, name, newValue);
-	
+
 	zend_fcall_info_cache fcc;
 	char *errstr = NULL;
 
 	if(zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr))
 	{
+		Z_ADDREF_P(newValue);
+		EM_ASM({ console.log('INC_ZVAL_1a', $0, $1); }, newValue, Z_REFCOUNTED_P(newValue));
+
 		EM_ASM({ (() =>{
 			const target   = Module.targets.get($0) || globalThis;
 			const property = UTF8ToString($1);
 			const funcPtr  = $2;
+			const zvalPtr  = $3;
 			console.log('WRITING FUNCTION', {aa: $0, target, property, funcPtr});
 			target[property] = (...args) => {
 				console.log('CALLING FUNCTION', funcPtr, {targets: Module.targets});
@@ -309,12 +316,196 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 					, [funcPtr]
 				);
 			};
-		})() }, targetId, name, fcc.function_handler);
+			Module.fRegistry.register(target[property], zvalPtr);
+		})() }, targetId, name, fcc.function_handler, newValue);
 
 		return newValue;
 	}
 
-	switch (Z_TYPE_P(newValue)) {
+	switch(Z_TYPE_P(newValue))
+	{
+		case IS_OBJECT:
+
+			Z_ADDREF_P(newValue);
+			EM_ASM({ console.log('INC_ZVAL_1b', $0, $1); }, newValue, Z_REFCOUNTED_P(newValue));
+
+			EM_ASM({ (() =>{
+				const target = Module.targets.get($0) || globalThis;
+				const property = UTF8ToString($1);
+				const zvalPtr = $2;
+
+				console.log('Inc refcount for zVal@' + zvalPtr);
+
+				const marshalObject = zvalPtr => {
+
+					return new Proxy({}, {
+						get: (target, prop, receiver) => {
+							console.log(target);
+
+							if(target[prop])
+							{
+								return target[prop];
+							}
+
+							const len     = lengthBytesUTF8(prop) + 1;
+							const namePtr = _malloc(len);
+
+							stringToUTF8(prop, namePtr, len);
+
+							const IS_UNDEF  = 0;
+							const IS_NULL   = 1;
+							const IS_FALSE  = 2;
+							const IS_TRUE   = 3;
+							const IS_LONG   = 4;
+							const IS_DOUBLE = 5;
+							const IS_STRING = 6;
+							const IS_ARRAY  = 7;
+							const IS_OBJECT = 8;
+
+							const callable = Module.ccall(
+								'vrzno_expose_property_callable'
+								, 'number'
+								, ['number', 'number']
+								, [zvalPtr, namePtr]
+							);
+
+							const type = Module.ccall(
+								'vrzno_expose_property_type'
+								, 'number'
+								, ['number', 'number']
+								, [zvalPtr, namePtr]
+							);
+
+							let valPtr, value;
+
+							console.log({callable, type, zvalPtr, namePtr});
+
+							if(callable)
+							{
+								target[prop] = (...args) => {
+									console.log('CALLING FUNCTION', callable, {targets: Module.targets});
+									Module.ccall(
+										'exec_callback'
+										, 'number'
+										, ["number"]
+										, [callable]
+									);
+								};
+
+								return target[prop];
+							}
+
+							switch(type)
+							{
+								case IS_UNDEF:
+									_free(namePtr);
+									return undefined;
+									break;
+
+								case IS_NULL:
+									_free(namePtr);
+									return null;
+									break;
+
+								case IS_TRUE:
+									_free(namePtr);
+									return true;
+									break;
+
+								case IS_FALSE:
+									_free(namePtr);
+									return false;
+									break;
+
+								case IS_LONG:
+									const longVal = Module.ccall(
+										'vrzno_expose_property_long'
+										, 'number'
+										, ['number', 'number']
+										, [zvalPtr, namePtr]
+									);
+
+									_free(namePtr);
+
+									return longVal;
+									break;
+
+								case IS_DOUBLE:
+									valPtr = Module.ccall(
+										'vrzno_expose_property_double'
+										, 'number'
+										, ['number', 'number']
+										, [zvalPtr, namePtr]
+									);
+
+									_free(namePtr);
+
+									if(!valPtr)
+									{
+										return null;
+									}
+
+									return getValue(valPtr, 'double');
+									break;
+
+								case IS_STRING:
+									valPtr = Module.ccall(
+										'vrzno_expose_property_string'
+										, 'number'
+										, ['number', 'number']
+										, [zvalPtr, namePtr]
+									);
+
+									_free(namePtr);
+
+									if(!valPtr)
+									{
+										return null;
+									}
+
+									return UTF8ToString(valPtr);
+									break;
+
+								// case IS_ARRAY:
+								// 	break;
+
+								case IS_OBJECT:
+
+									retZValPtr = Module.ccall(
+										'vrzno_expose_property_pointer'
+										, 'number'
+										, ['number', 'number']
+										, [zvalPtr, namePtr]
+									);
+
+									_free(namePtr);
+
+									if(!retZValPtr)
+									{
+										return null;
+									}
+
+									target[prop] = marshalObject(retZValPtr);
+
+									return target[prop];
+									break;
+
+								default:
+									_free(namePtr);
+									return null;
+									break;
+							}
+						}
+					});
+				};
+
+				target[property] = marshalObject(zvalPtr);
+
+				Module.fRegistry.register(target[property], zvalPtr);
+
+			})() }, targetId, name, newValue);
+			break;
+
 		case IS_UNDEF:
 			EM_ASM({ (() =>{
 				const target = Module.targets.get($0) || globalThis;
@@ -419,7 +610,7 @@ static zval * vrzno_read_dimension(zend_object *object, zval *offset, int type, 
 	{
 		ZVAL_STRING(rv, scalar_result + 2);
 		free(scalar_result);
-		
+
 		return rv;
 	}
 
@@ -706,7 +897,7 @@ int vrzno_exec_callback(zend_function *fptr)
 	fcc.called_scope     = NULL;
 	fcc.object           = NULL;
 
-	EM_ASM({ console.log($0, $1) }, &fci, &fcc);
+	EM_ASM({ console.log('exec', $0, $1, $2) }, &fci, &fcc, fptr);
 
 	if(zend_call_function(&fci, &fcc) == SUCCESS && Z_TYPE(retval) != IS_UNDEF)
 	{
@@ -934,7 +1125,7 @@ PHP_METHOD(Vrzno, __get)
 
 		const target        = Module.targets.get($0) || globalThis;
 		const property_name = UTF8ToString($1);
-		
+
 		console.log('GET1', $0, {target, property_name});
 
 		target[property_name] = newValueJson;
@@ -955,59 +1146,3 @@ PHP_METHOD(Vrzno, __get)
 
 	RETURN_STR(retval);
 }
-
-// PHP_METHOD(Vrzno, __set)
-// {
-// 	zend_string      *retval;
-// 	php_json_encoder  encoder;
-// 	zend_long         opt = 0;
-
-// 	zval         *object   = getThis();
-// 	vrzno_object *vrzno    = object->value.obj;
-// 	long          targetId = vrzno->targetId;
-
-// 	char   *js_property_name     = "";
-// 	size_t  js_property_name_len = sizeof(js_property_name) - 1;
-// 	zval   *js_new_value;
-
-// 	ZEND_PARSE_PARAMETERS_START(2, 2)
-// 		Z_PARAM_STRING(js_property_name, js_property_name_len)
-// 		Z_PARAM_ZVAL_OR_NULL(js_new_value)
-// 	ZEND_PARSE_PARAMETERS_END();
-
-// 	smart_str buf = {0};
-
-// 	php_json_encode_init(&encoder);
-// 	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
-// 	php_json_encode_zval(&buf, js_new_value, opt, &encoder);
-
-// 	char *js_args = ZSTR_VAL(buf.s);
-
-// 	smart_str_0(&buf);
-
-// 	EM_ASM_INT({
-
-// 		const target        = Module.targets.get($0) || globalThis;
-// 		const property_name = UTF8ToString($1);
-// 		const newValueJson  = UTF8ToString($2);
-
-// 		const newValue = JSON.parse(newValueJson || '[]') || [];
-
-// 		target[property_name] = newValueJson;
-
-// 		// const jsRet    = String(target[property_name](...args));
-// 		// const len      = lengthBytesUTF8(jsRet) + 1;
-// 		// const strLoc   = _malloc(len);
-
-// 		// stringToUTF8(jsRet, strLoc, len);
-
-// 		// return strLoc;
-
-// 	}, targetId, js_property_name, js_args);
-
-// 	// retval = strpprintf(0, "%s", js_ret);
-
-// 	// free(js_ret);
-
-// 	// RETURN_STR(retval);
-// }
