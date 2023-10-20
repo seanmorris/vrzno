@@ -665,156 +665,41 @@ static zend_string *vrzno_get_class_name(zend_object *object)
 	return retVal;
 }
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_addeventlistener, 0, 0, 2)
-	ZEND_ARG_INFO(0, eventName)
-	ZEND_ARG_INFO(0, callback)
-	ZEND_ARG_INFO(1, options)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_INFO_EX(arginfo_removeeventlistener, 0, 0, 1)
-	ZEND_ARG_INFO(0, callbackId)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_INFO_EX(arginfo_queryselector, 0, 0, 1)
-	ZEND_ARG_INFO(0, selector)
-ZEND_END_ARG_INFO()
-
 ZEND_BEGIN_ARG_INFO_EX(arginfo___call, 0, 0, 2)
 	ZEND_ARG_INFO(0, method_name)
 	ZEND_ARG_INFO(0, args)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo___invoke, 0, 0, -1)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo___get, 0, 0, 1)
 	ZEND_ARG_INFO(0, property_name)
 ZEND_END_ARG_INFO()
 
-PHP_METHOD(Vrzno, addeventlistener)
+static const zend_function_entry vrzno_vrzno_methods[] = {
+	// PHP_ME(Vrzno, __construct, arginfo___call,   ZEND_ACC_PUBLIC)
+	// PHP_ME(Vrzno, __destruct,  arginfo___call,   ZEND_ACC_PUBLIC)
+	PHP_ME(Vrzno, __call,      arginfo___call,   ZEND_ACC_PUBLIC)
+	PHP_ME(Vrzno, __invoke,    arginfo___invoke, ZEND_ACC_PUBLIC)
+	PHP_ME(Vrzno, __get,       arginfo___get,    ZEND_ACC_PUBLIC)
+	PHP_FE_END
+};
+
+PHP_METHOD(Vrzno, __construct)
 {
-	zval         *object         = getThis();
-	zend_object  *zObject        = object->value.obj;
-	vrzno_object *vrzno =         vrzno_fetch_object(zObject);
-	long          targetId       = vrzno->targetId;
-	char         *event_name     = "";
-	size_t        event_name_len = sizeof(event_name) - 1;
-	zval         *options;
-
-	zend_fcall_info       fci;
-	zend_fcall_info_cache fcc;
-
-	ZEND_PARSE_PARAMETERS_START(2, 3)
-		Z_PARAM_STRING(event_name, event_name_len)
-		Z_PARAM_FUNC(fci, fcc)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ARRAY(options)
-	ZEND_PARSE_PARAMETERS_END();
-
-	GC_ADDREF(ZEND_CLOSURE_OBJECT(fcc.function_handler));
-
-	int callbackId = EM_ASM_INT({
-
-		const target    = Module.targets.get($0) || globalThis;
-		const eventName = UTF8ToString($1);
-		const funcPtr   = $2;
-		const options   = {};
-
-		const callback  = () => {
-			Module.ccall(
-				'vrzno_exec_callback'
-				, 'number'
-				, ['number','number','number']
-				, [funcPtr, null, 0]
-			);
-		};
-
-		target.addEventListener(eventName, callback, options);
-
-		const remover = () => {
-			target.removeEventListener(eventName, callback, options);
-			return $2;
-		};
-
-		return Module.callbacks.add(remover);
-
-	}, targetId, event_name, fcc.function_handler);
-
-	RETURN_LONG(callbackId);
+	zval         *object   = getThis();
+	zend_object  *zObject  = object->value.obj;
+	vrzno_object *vrzno    = vrzno_fetch_object(zObject);
+	long          targetId = vrzno->targetId;
 }
 
-PHP_METHOD(Vrzno, removeeventlistener)
+PHP_METHOD(Vrzno, __destruct)
 {
-	int callbackId;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_LONG(callbackId)
-	ZEND_PARSE_PARAMETERS_END();
-
-	zend_function *fptr = EM_ASM_INT({
-
-		const remover = Module.callbacks.get($0);
-
-		return remover();
-
-	}, callbackId);
-
-	if(fptr)
-	{
-		GC_DELREF(ZEND_CLOSURE_OBJECT(fptr));
-	}
-}
-
-PHP_METHOD(Vrzno, queryselector)
-{
-	zval         *object         = getThis();
-	zend_object  *zObject        = object->value.obj;
-	vrzno_object *vrzno =         vrzno_fetch_object(zObject);
-	long          targetId       = vrzno->targetId;
-	char         *query_selector = "";
-	size_t        query_selector_len = sizeof(query_selector) - 1;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STRING(query_selector, query_selector_len)
-	ZEND_PARSE_PARAMETERS_END();
-
-	int obj_result = EM_ASM_INT({
-
-		const target        = Module.targets.get($0) || globalThis;
-		const querySelector = UTF8ToString($1);
-
-		const result        = target.querySelector(querySelector);
-
-		if(!result)
-		{
-			return 0;
-		}
-
-		let index = Module.targets.getId(result);
-
-		if(!Module.targets.has(result))
-		{
-			index = Module.targets.add(result);
-		}
-
-		console.log({index, result});
-
-		return index;
-
-	}, targetId, query_selector);
-
-	if(!obj_result)
-	{
-		RETURN_BOOL(0);
-		return;
-	}
-
-	zend_object  *retZObj  = zend_object_alloc(sizeof(vrzno_object), vrzno_class_entry);
-	vrzno_object *retVrzno = vrzno_fetch_object(retZObj);
-
-    zend_object_std_init(&retVrzno->zo, vrzno_class_entry);
-
-    retVrzno->zo.handlers = &vrzno_object_handlers;
-    retVrzno->targetId = (long) obj_result;
-
-    RETURN_OBJ(retZObj);
+	zval         *object   = getThis();
+	zend_object  *zObject  = object->value.obj;
+	vrzno_object *vrzno    = vrzno_fetch_object(zObject);
+	long          targetId = vrzno->targetId;
 }
 
 PHP_METHOD(Vrzno, __call)
@@ -875,7 +760,85 @@ PHP_METHOD(Vrzno, __call)
 
 		return strLoc;
 
-	}, targetId, js_method_name, zvalPtrs, js_argc, size);
+	}, targetId, zvalPtrs, js_argc, size);
+
+	efree(zvalPtrs);
+
+	zend_string *retval;
+
+	retval = strpprintf(0, "%s", js_ret);
+
+	free(js_ret);
+
+	RETURN_STR(retval);
+}
+
+PHP_METHOD(Vrzno, __invoke)
+{
+	zval         *object   = getThis();
+	zend_object  *zObject  = object->value.obj;
+	vrzno_object *vrzno    = vrzno_fetch_object(zObject);
+	long          targetId = vrzno->targetId;
+
+	EM_ASM({ console.log('ICALL1', $0) }, targetId);
+	zval *js_argv;
+	int js_argc = 0;
+
+	ZEND_PARSE_PARAMETERS_START(0, -1)
+		Z_PARAM_VARIADIC('*', js_argv, js_argc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	// if(zend_parse_parameters(ZEND_NUM_ARGS(), "*", &js_argv, &js_argc) == FAILURE)
+	// {
+	// 	return;
+	// }
+
+	php_debug_zval_dump(&js_argv[1], 2);
+
+	EM_ASM({ console.log('ICALL2', $0) }, js_argc);
+
+	int size = sizeof(zval);
+
+	zval *zvalPtrs = (zval*) malloc(js_argc * sizeof(zval));
+	zval *data;
+	int i = 0;
+
+	EM_ASM({ console.log('ICALL3', $0, $1) }, js_argc, i);
+
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(js_argv), data) {
+        // ZVAL_COPY(&zvalPtrs[i], data);
+        i++;
+    } ZEND_HASH_FOREACH_END();
+
+	EM_ASM({ console.log('ICALL4', $0, $1) }, js_argc, i);
+
+	char *js_ret = EM_ASM_INT({
+
+		const target = Module.targets.get($0) || globalThis;
+		const argv   = $1;
+		const argc   = $2;
+		const size   = $3;
+
+		const args   = [];
+
+		console.log({argv, argc, size});
+
+		for(let i = 0; i < argc; i++)
+		{
+			args.push(Module.zvalToJS(argv + i * size));
+		}
+
+		console.log('ICALLING', {aa: $0, target, args, targets: Module.targets});
+
+		const jsRet  = String(target(...args));
+		const len    = lengthBytesUTF8(jsRet) + 1;
+		const strLoc = _malloc(len);
+
+		stringToUTF8(jsRet, strLoc, len);
+
+		return strLoc;
+
+	}, targetId, zvalPtrs, js_argc, size);
 
 	efree(zvalPtrs);
 

@@ -22,6 +22,7 @@ PHP_FUNCTION(vrzno_timeout);
 PHP_METHOD(Vrzno, addeventlistener);
 PHP_METHOD(Vrzno, removeeventlistener);
 PHP_METHOD(Vrzno, queryselector);
+PHP_METHOD(Vrzno, __invoke);
 PHP_METHOD(Vrzno, __call);
 PHP_METHOD(Vrzno, __get);
 // PHP_METHOD(Vrzno, __set);

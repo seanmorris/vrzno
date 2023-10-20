@@ -30,16 +30,6 @@
 #include "vrzno_expose.c"
 #include "vrzno_functions.c"
 
-static const zend_function_entry vrzno_vrzno_methods[] = {
-	PHP_ME(Vrzno, addeventlistener,    arginfo_addeventlistener, ZEND_ACC_PUBLIC)
-	PHP_ME(Vrzno, removeeventlistener, arginfo_removeeventlistener, ZEND_ACC_PUBLIC)
-	PHP_ME(Vrzno, queryselector, arginfo_queryselector, ZEND_ACC_PUBLIC)
-	PHP_ME(Vrzno, __call, arginfo___call, ZEND_ACC_PUBLIC)
-	PHP_ME(Vrzno, __get, arginfo___get, ZEND_ACC_PUBLIC)
-	// PHP_ME(Vrzno, __set, arginfo___set, ZEND_ACC_PUBLIC)
-	PHP_FE_END
-};
-
 PHP_RINIT_FUNCTION(vrzno)
 {
 #if defined(ZTS) && defined(COMPILE_DL_VRZNO)
