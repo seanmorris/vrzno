@@ -730,6 +730,7 @@ PHP_METHOD(Vrzno, __call)
 
 	ZEND_HASH_PACKED_FOREACH_VAL(js_argv, data) {
         ZVAL_COPY(&zvalPtrs[i], data);
+		Z_ADDREF_P(&zvalPtrs[i]);
         i++;
     } ZEND_HASH_FOREACH_END();
 
@@ -780,37 +781,21 @@ PHP_METHOD(Vrzno, __invoke)
 	vrzno_object *vrzno    = vrzno_fetch_object(zObject);
 	long          targetId = vrzno->targetId;
 
-	EM_ASM({ console.log('ICALL1', $0) }, targetId);
-	zval *js_argv;
+	EM_ASM({ console.log('ICALL1', $0, $1, $2) }, targetId, zObject, vrzno);
+
 	int js_argc = 0;
+	zval *js_argv;
 
 	ZEND_PARSE_PARAMETERS_START(0, -1)
 		Z_PARAM_VARIADIC('*', js_argv, js_argc)
 	ZEND_PARSE_PARAMETERS_END();
 
-	// if(zend_parse_parameters(ZEND_NUM_ARGS(), "*", &js_argv, &js_argc) == FAILURE)
-	// {
-	// 	return;
-	// }
-
-	php_debug_zval_dump(&js_argv[1], 2);
-
-	EM_ASM({ console.log('ICALL2', $0) }, js_argc);
+	php_debug_zval_dump(js_argv, 2);
 
 	int size = sizeof(zval);
-
-	zval *zvalPtrs = (zval*) malloc(js_argc * sizeof(zval));
-	zval *data;
 	int i = 0;
 
-	EM_ASM({ console.log('ICALL3', $0, $1) }, js_argc, i);
-
-	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(js_argv), data) {
-        // ZVAL_COPY(&zvalPtrs[i], data);
-        i++;
-    } ZEND_HASH_FOREACH_END();
-
-	EM_ASM({ console.log('ICALL4', $0, $1) }, js_argc, i);
+	EM_ASM({ console.log('ICALL3', $0, $1) }, targetId, i);
 
 	char *js_ret = EM_ASM_INT({
 
@@ -838,9 +823,7 @@ PHP_METHOD(Vrzno, __invoke)
 
 		return strLoc;
 
-	}, targetId, zvalPtrs, js_argc, size);
-
-	efree(zvalPtrs);
+	}, targetId, js_argv, js_argc, size);
 
 	zend_string *retval;
 
