@@ -64,7 +64,7 @@ PHP_MINIT_FUNCTION(vrzno)
 	vrzno_object_handlers.write_dimension    = vrzno_write_dimension;
 	vrzno_object_handlers.has_dimension      = vrzno_has_dimension;
 	vrzno_object_handlers.unset_dimension    = vrzno_unset_dimension;
-	vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
+	// vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
 
 	EM_ASM({
 		console.log('Startup!');

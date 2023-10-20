@@ -730,7 +730,6 @@ PHP_METHOD(Vrzno, __call)
 
 	ZEND_HASH_PACKED_FOREACH_VAL(js_argv, data) {
         ZVAL_COPY(&zvalPtrs[i], data);
-		Z_ADDREF_P(&zvalPtrs[i]);
         i++;
     } ZEND_HASH_FOREACH_END();
 
@@ -793,9 +792,19 @@ PHP_METHOD(Vrzno, __invoke)
 	php_debug_zval_dump(js_argv, 2);
 
 	int size = sizeof(zval);
+
+	zval *zvalPtrs = (zval*) malloc(js_argc * sizeof(zval));
 	int i = 0;
 
 	EM_ASM({ console.log('ICALL3', $0, $1) }, targetId, i);
+
+	// for(i = 0; i < js_argc; i++)
+	// {
+    //     ZVAL_COPY(&zvalPtrs[i], js_argv[i]);
+    //     i++;
+	// }
+
+	EM_ASM({ console.log('ICALL4', $0, $1) }, js_argc, i);
 
 	char *js_ret = EM_ASM_INT({
 
@@ -824,6 +833,8 @@ PHP_METHOD(Vrzno, __invoke)
 		return strLoc;
 
 	}, targetId, js_argv, js_argc, size);
+
+	efree(zvalPtrs);
 
 	zend_string *retval;
 
