@@ -12,7 +12,7 @@ extern zend_module_entry vrzno_module_entry;
 ZEND_TSRMLS_CACHE_EXTERN()
 # endif
 
-extern PHPAPI int vrzno_exec_callback(zend_function *fptr);
+extern PHPAPI int vrzno_exec_callback(zend_function *fptr, zval **argv, int argc);
 extern PHPAPI int vrzno_del_callback(zend_function *fptr);
 
 PHP_FUNCTION(vrzno_eval);
