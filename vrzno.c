@@ -30,15 +30,8 @@
 #include "vrzno_expose.c"
 #include "vrzno_functions.c"
 
-PHP_RINIT_FUNCTION(vrzno)
-{
-#if defined(ZTS) && defined(COMPILE_DL_VRZNO)
-	ZEND_TSRMLS_CACHE_UPDATE();
-#endif
-	return SUCCESS;
-}
 
-PHP_MINIT_FUNCTION(vrzno)
+PHP_RINIT_FUNCTION(vrzno)
 {
 	zend_class_entry ce;
 
@@ -64,10 +57,13 @@ PHP_MINIT_FUNCTION(vrzno)
 	vrzno_object_handlers.write_dimension    = vrzno_write_dimension;
 	vrzno_object_handlers.has_dimension      = vrzno_has_dimension;
 	vrzno_object_handlers.unset_dimension    = vrzno_unset_dimension;
-	// vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
+	vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
 
 	EM_ASM({
 		console.log('Startup!');
+
+		Module.hasZval = Symbol('HAS_ZVAL');
+
 		Module.marshalObject = ((zvalPtr) => new Proxy({}, {
 			get: (target, prop, receiver) => {
 				console.log(target);
@@ -89,8 +85,17 @@ PHP_MINIT_FUNCTION(vrzno)
 					, [zvalPtr, namePtr]
 				));
 
+				_free(namePtr);
+
 				if(typeof proxy === 'object')
 				{
+					Module.ccall(
+						'vrzno_expose_inc_refcount'
+						, 'number'
+						, ['number']
+						, [zvalPtr]
+					);
+
 					Module.fRegistry.register(proxy, zvalPtr);
 				}
 
@@ -123,23 +128,62 @@ PHP_MINIT_FUNCTION(vrzno)
 				const wrapped = (...args) => {
 					console.log('CALLING FUNCTION', callable, {targets: Module.targets});
 
-					const ptrs = args.map(a => Module.jsToZval(a));
+					const ptrs = args.map(a => Module.jsToZval(a) );
 
-					console.log(ptrs);
+					console.log({ptrs,args});
+
+					const paramsPtr = Module.ccall(
+						'vrzno_expose_create_params'
+						, 'number'
+						, ["number","number"]
+						, [args.length]
+					);
+
+					const paramPtrs = args.map(a => Module.jsToZval(a));
+
+					paramPtrs.forEach((paramPtr,i) => {
+						console.log({paramsPtr, i, paramPtr});
+						Module.ccall(
+							'vrzno_expose_set_param'
+							, 'number'
+							, ['number','number','number']
+							, [paramsPtr, i, paramPtr]
+						);
+					});
+
+					console.log({paramsPtr});
 
 					const zvalPtr = Module.ccall(
 						'vrzno_exec_callback'
 						, 'number'
 						, ['number','number','number']
-						, [callable, null, 0]
+						, [callable, paramsPtr, args.length]
 					);
+
+					// paramPtrs.forEach((paramPtr,i) => {
+					// 	Module.ccall(
+					// 		'vrzno_expose_efree'
+					// 		, 'number'
+					// 		, ['number']
+					// 		, [paramPtr]
+					// 	);
+					// });
+
+					// Module.ccall(
+					// 	'vrzno_expose_efree'
+					// 	, 'number'
+					// 	, ['number']
+					// 	, [paramsPtr]
+					// );
 
 					const marshalled = Module.zvalToJS(zvalPtr);
 
-					console.log({zvalPtr, marshalled});
+					console.log({zvalPtr, paramsPtr, marshalled});
 
 					return marshalled;
 				};
+
+				wrapped[ Module.hasZval ] = zvalPtr;
 
 				return wrapped;
 			}
@@ -238,11 +282,43 @@ PHP_MINIT_FUNCTION(vrzno)
 
 		Module.jsToZval = Module.jsToZval || (value => {
 
+			if(value && ['function','object'].includes(typeof value))
+			{
+				if(value[ Module.hasZval ])
+				{
+					console.log('Using existing ZVAL FOR', value);
+
+					return value[ Module.hasZval ];
+				}
+			}
+
 			console.log('CREATING ZVAL FOR', value);
 
 			let zvalPtr;
 
-			if([true, false].includes(value))
+			if(typeof value === 'undefined')
+			{
+				zvalPtr = Module.ccall(
+					'vrzno_expose_create_undef'
+					, 'number'
+					, []
+					, []
+				);
+
+				console.log('Undef:', {zvalPtr});
+			}
+			else if(value === null)
+			{
+				zvalPtr = Module.ccall(
+					'vrzno_expose_create_null'
+					, 'number'
+					, []
+					, []
+				);
+
+				console.log('Bool:', {zvalPtr});
+			}
+			else if([true, false].includes(value))
 			{
 				zvalPtr = Module.ccall(
 					'vrzno_expose_create_bool'
@@ -251,9 +327,9 @@ PHP_MINIT_FUNCTION(vrzno)
 					, [value]
 				);
 
-				console.log('Bool:', {zvalPtr});
+				console.log('Null:', {zvalPtr});
 			}
-			else if(['function','object'].includes(typeof value))
+			else if(value && ['function','object'].includes(typeof value))
 			{
 				let index;
 
@@ -266,7 +342,7 @@ PHP_MINIT_FUNCTION(vrzno)
 					index = Module.targets.getId(value);
 				}
 
-				console.log({index});
+				console.log({index, value});
 
 				zvalPtr = Module.ccall(
 					'vrzno_expose_create_object_for_target'
@@ -274,6 +350,15 @@ PHP_MINIT_FUNCTION(vrzno)
 					, ["number"]
 					, [index]
 				);
+
+				Module.ccall(
+					'vrzno_expose_inc_refcount'
+					, 'number'
+					, ['number']
+					, [zvalPtr]
+				);
+
+				value[ Module.hasZval ] = zvalPtr;
 
 				Module.fRegistry.register(value, zvalPtr);
 			}
@@ -319,6 +404,8 @@ PHP_MINIT_FUNCTION(vrzno)
 					, [strLoc]
 				);
 
+				_free(strLoc);
+
 				console.log('String:', {zvalPtr});
 			}
 
@@ -332,12 +419,12 @@ PHP_MINIT_FUNCTION(vrzno)
 				this.byInteger = new Map();
 				this.byObject  = new Map();
 
-				let id = 0;
+				this.id = 0;
 
 				Object.defineProperty(this, 'add', {
 					configurable: false
 					, writable:   false
-					, value: (callback) => {
+					, value: (callback, address) => {
 
 						if(this.byObject.has(callback))
 						{
@@ -346,7 +433,7 @@ PHP_MINIT_FUNCTION(vrzno)
 							return id;
 						}
 
-						const newid = ++id;
+						const newid = ++this.id;
 
 						this.byObject.set(callback, newid);
 						this.byInteger.set(newid, callback);
@@ -405,8 +492,12 @@ PHP_MINIT_FUNCTION(vrzno)
 			}
 		});
 
-		Module.targets = new Module.UniqueIndex;
+		Module.targets = Module.targets || new Module.UniqueIndex;
 	});
+
+#if defined(ZTS) && defined(COMPILE_DL_VRZNO)
+	ZEND_TSRMLS_CACHE_UPDATE();
+#endif
 
 	return SUCCESS;
 }
@@ -421,13 +512,13 @@ PHP_MINFO_FUNCTION(vrzno)
 zend_module_entry vrzno_module_entry = {
 	STANDARD_MODULE_HEADER,
 	"vrzno",
-	vrzno_functions,		   /* zend_function_entry */
-	PHP_MINIT(vrzno),		   /* PHP_MINIT - Module initialization */
-	NULL,					   /* PHP_MSHUTDOWN - Module shutdown */
-	PHP_RINIT(vrzno),		   /* PHP_RINIT - Request initialization */
+	vrzno_functions,           /* zend_function_entry */
+	NULL,                      /* PHP_MINIT - Module initialization */
+	NULL,                      /* PHP_MSHUTDOWN - Module shutdown */
+	PHP_RINIT(vrzno),          /* PHP_RINIT - Request initialization */
 	NULL,                      /* PHP_RSHUTDOWN - Request shutdown */
-	PHP_MINFO(vrzno),		   /* PHP_MINFO - Module info */
-	PHP_VRZNO_VERSION,		   /* Version */
+	PHP_MINFO(vrzno),          /* PHP_MINFO - Module info */
+	PHP_VRZNO_VERSION,         /* Version */
 	STANDARD_MODULE_PROPERTIES
 };
 
@@ -451,6 +542,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 	fci.object           = NULL;
 	fci.retval           = &retval;
 	fci.params           = params;
+	fci.named_params     = 0;
 	fci.param_count      = argc;
 
 	fcc.function_handler = fptr;
@@ -462,7 +554,8 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 		int i;
 		for(i = 0; i < argc; i++)
 		{
-			params[i] = *argv[i];
+			ZVAL_NULL(&params[i]);
+			ZVAL_COPY(&params[i], argv[i]);
 		}
 	}
 

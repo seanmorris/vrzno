@@ -13,7 +13,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_refcount(zval *zv)
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
 {
-	zval *zv = (zval*) malloc(sizeof(zval));
+	zval *zv = (zval*) emalloc(sizeof(zval));
 
 	if(value)
 	{
@@ -27,38 +27,52 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
 	return zv;
 }
 
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_null(void)
+{
+	zval *zv = (zval*) emalloc(sizeof(zval));
+    ZVAL_NULL(zv);
+	return zv;
+}
+
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_undef(void)
+{
+	zval *zv = (zval*) emalloc(sizeof(zval));
+    ZVAL_UNDEF(zv);
+	return zv;
+}
+
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_long(long value)
 {
-	zval *zv = (zval*) malloc(sizeof(zval));
+	zval *zv = (zval*) emalloc(sizeof(zval));
     ZVAL_LONG(zv, value);
 	return zv;
 }
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double* value)
 {
-	zval *zv = (zval*) malloc(sizeof(zval));
+	zval *zv = (zval*) emalloc(sizeof(zval));
 	ZVAL_DOUBLE(zv, *value);
 	return zv;
 }
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
 {
-	zval *zv = (zval*) malloc(sizeof(zval));
+	zval *zv = (zval*) emalloc(sizeof(zval));
 	ZVAL_STRING(zv, value);
 	return zv;
 }
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id)
 {
-	zval *zv = (zval*) malloc(sizeof(zval));
-	zend_object *zObj = vrzno_create_object_for_target(target_id);
-	ZVAL_OBJ(zv, zObj);
+	zval *zv = (zval*) emalloc(sizeof(zval));
+	vrzno_object *vObj = vrzno_create_object_for_target(target_id);
+	ZVAL_OBJ(zv, &vObj->zo);
 	return zv;
 }
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_params(int argc)
 {
-	zval *zvals = (zval*) malloc(argc * sizeof(zval*));
+	zval *zvals = (zval*) emalloc(argc * sizeof(zval*));
 	return zvals;
 }
 
@@ -76,11 +90,15 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_dump(zval* zv)
 // {
 // }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_ptor_dtor(zval *zv)
-{
-	zval_ptr_dtor(zv);
-}
+// void EMSCRIPTEN_KEEPALIVE vrzno_expose_ptor_dtor(zval *zv)
+// {
+// 	zval_ptr_dtor(zv);
+// }
 
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(long address)
+{
+	efree(address);
+}
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_type(zval *zv)
 {
