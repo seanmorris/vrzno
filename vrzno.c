@@ -103,6 +103,66 @@ PHP_RINIT_FUNCTION(vrzno)
 			}
 		}));
 
+		Module.callableToJs = Module.callableToJs || (funcPtr => {
+			console.log('WRAPPING FUNCTION', funcPtr);
+			return (...args) => {
+				console.log('CALLING FUNCTION', funcPtr);
+
+				const ptrs = args.map(a => Module.jsToZval(a) );
+
+				console.log({ptrs,args});
+
+				const paramsPtr = Module.ccall(
+					'vrzno_expose_create_params'
+					, 'number'
+					, ["number","number"]
+					, [args.length]
+				);
+
+				const paramPtrs = args.map(a => Module.jsToZval(a));
+
+				paramPtrs.forEach((paramPtr,i) => {
+					console.log({paramsPtr, i, paramPtr});
+					Module.ccall(
+						'vrzno_expose_set_param'
+						, 'number'
+						, ['number','number','number']
+						, [paramsPtr, i, paramPtr]
+					);
+				});
+
+				console.log({paramsPtr});
+
+				const zvalPtr = Module.ccall(
+					'vrzno_exec_callback'
+					, 'number'
+					, ['number','number','number']
+					, [funcPtr, paramsPtr, args.length]
+				);
+
+				// paramPtrs.forEach((paramPtr,i) => {
+				// 	Module.ccall(
+				// 		'vrzno_expose_efree'
+				// 		, 'number'
+				// 		, ['number']
+				// 		, [paramPtr]
+				// 	);
+				// });
+
+				// Module.ccall(
+				// 	'vrzno_expose_efree'
+				// 	, 'number'
+				// 	, ['number']
+				// 	, [paramsPtr]
+				// );
+
+				const marshalled = Module.zvalToJS(zvalPtr);
+
+				console.log({zvalPtr, paramsPtr, marshalled});
+
+				return marshalled;
+		}});
+
 		Module.zvalToJS = Module.zvalToJS || (zvalPtr => {
 			const IS_UNDEF  = 0;
 			const IS_NULL   = 1;
@@ -125,63 +185,7 @@ PHP_RINIT_FUNCTION(vrzno)
 
 			if(callable)
 			{
-				const wrapped = (...args) => {
-					console.log('CALLING FUNCTION', callable, {targets: Module.targets});
-
-					const ptrs = args.map(a => Module.jsToZval(a) );
-
-					console.log({ptrs,args});
-
-					const paramsPtr = Module.ccall(
-						'vrzno_expose_create_params'
-						, 'number'
-						, ["number","number"]
-						, [args.length]
-					);
-
-					const paramPtrs = args.map(a => Module.jsToZval(a));
-
-					paramPtrs.forEach((paramPtr,i) => {
-						console.log({paramsPtr, i, paramPtr});
-						Module.ccall(
-							'vrzno_expose_set_param'
-							, 'number'
-							, ['number','number','number']
-							, [paramsPtr, i, paramPtr]
-						);
-					});
-
-					console.log({paramsPtr});
-
-					const zvalPtr = Module.ccall(
-						'vrzno_exec_callback'
-						, 'number'
-						, ['number','number','number']
-						, [callable, paramsPtr, args.length]
-					);
-
-					// paramPtrs.forEach((paramPtr,i) => {
-					// 	Module.ccall(
-					// 		'vrzno_expose_efree'
-					// 		, 'number'
-					// 		, ['number']
-					// 		, [paramPtr]
-					// 	);
-					// });
-
-					// Module.ccall(
-					// 	'vrzno_expose_efree'
-					// 	, 'number'
-					// 	, ['number']
-					// 	, [paramsPtr]
-					// );
-
-					const marshalled = Module.zvalToJS(zvalPtr);
-
-					console.log({zvalPtr, paramsPtr, marshalled});
-
-					return marshalled;
-				};
+				const wrapped = Module.callableToJs(callable);
 
 				wrapped[ Module.hasZval ] = zvalPtr;
 
@@ -424,7 +428,7 @@ PHP_RINIT_FUNCTION(vrzno)
 				Object.defineProperty(this, 'add', {
 					configurable: false
 					, writable:   false
-					, value: (callback, address) => {
+					, value: (callback) => {
 
 						if(this.byObject.has(callback))
 						{
@@ -445,10 +449,10 @@ PHP_RINIT_FUNCTION(vrzno)
 				Object.defineProperty(this, 'has', {
 					configurable: false
 					, writable:   false
-					, value: (callback) => {
-						if(this.byObject.has(callback))
+					, value: (obj) => {
+						if(this.byObject.has(obj))
 						{
-							return this.byObject.get(callback);
+							return this.byObject.get(obj);
 						}
 					}
 				});
@@ -456,10 +460,10 @@ PHP_RINIT_FUNCTION(vrzno)
 				Object.defineProperty(this, 'get', {
 					configurable: false
 					, writable:   false
-					, value: (id) => {
-						if(this.byInteger.has(id))
+					, value: (address) => {
+						if(this.byInteger.has(address))
 						{
-							return this.byInteger.get(id);
+							return this.byInteger.get(address);
 						}
 					}
 				});
@@ -467,10 +471,10 @@ PHP_RINIT_FUNCTION(vrzno)
 				Object.defineProperty(this, 'getId', {
 					configurable: false
 					, writable:   false
-					, value: (callback) => {
-						if(this.byObject.has(callback))
+					, value: (obj) => {
+						if(this.byObject.has(obj))
 						{
-							return this.byObject.get(callback);
+							return this.byObject.get(obj);
 						}
 					}
 				});
@@ -478,14 +482,14 @@ PHP_RINIT_FUNCTION(vrzno)
 				Object.defineProperty(this, 'remove', {
 					configurable: false
 					, writable:   false
-					, value: (id) => {
+					, value: (address) => {
 
-						const callback = this.byInteger.get(id);
+						const obj = this.byInteger.get(address);
 
-						if(callback)
+						if(obj)
 						{
-							this.byObject.delete(callback);
-							this.byInteger.delete(id);
+							this.byObject.delete(obj);
+							this.byInteger.delete(address);
 						}
 					}
 				});
@@ -546,6 +550,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 	fci.param_count      = argc;
 
 	fcc.function_handler = fptr;
+	fcc.calling_scope    = NULL;
 	fcc.called_scope     = NULL;
 	fcc.object           = NULL;
 
@@ -559,11 +564,17 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 		}
 	}
 
-	EM_ASM({ console.log('exec', $0, $1, $2, $3, $4) }, &fci, &fcc, fptr, argv, argc);
+	EM_ASM({ console.log('exec', $0, $1, $2) }, fptr, argv, argc);
+
 
 	if(zend_call_function(&fci, &fcc) == SUCCESS)
 	{
-		return fci.retval;
+		zval *retZval = (zval*) emalloc(sizeof(zval));
+
+		ZVAL_UNDEF(retZval);
+		ZVAL_COPY(retZval, &retval);
+
+		return retZval;
 	}
 
 	return NULL;

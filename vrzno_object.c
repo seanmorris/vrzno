@@ -44,7 +44,7 @@ static void vrzno_object_free(zend_object *zobj)
 
 	vrzno->targetId = NULL;
 
-	zend_object_std_dtor(zobj);
+	zend_object_std_dtor(&vrzno->zo);
 }
 
 zval *vrzno_read_property(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv)
@@ -100,7 +100,7 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 
 		console.log('READING', {aa: $0, target, property, result});
 
-		if(['function','object'].includes(typeof result))
+		if(result && ['function','object'].includes(typeof result))
 		{
 			let index = Module.targets.getId(result);
 
@@ -130,6 +130,7 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 	EM_ASM({ console.log('READ2', $0, $1, $2) }, obj_result, retVrzno, targetId);
 
 	ZVAL_OBJ(rv, &retVrzno->zo);
+	Z_ADDREF_P(rv);
 	return rv;
 }
 
@@ -163,60 +164,7 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 
 			console.log('WRITING FUNCTION', {aa: $0, target, property, funcPtr, zvalPtr, paramCount});
 
-			target[property] = (...args) => {
-
-				console.log('CALLING FUNCTION', funcPtr, {targets: Module.targets});
-
-				const paramsPtr = Module.ccall(
-					'vrzno_expose_create_params'
-					, 'number'
-					, ["number","number"]
-					, [args.length]
-				);
-
-				const paramPtrs = args.map(a => Module.jsToZval(a));
-
-				paramPtrs.forEach((paramPtr,i) => {
-					console.log({paramsPtr, i, paramPtr});
-					Module.ccall(
-						'vrzno_expose_set_param'
-						, 'number'
-						, ['number','number','number']
-						, [paramsPtr, i, paramPtr]
-					);
-				});
-
-				console.log({paramsPtr});
-
-				const zvalPtr = Module.ccall(
-					'vrzno_exec_callback'
-					, 'number'
-					, ['number','number','number']
-					, [funcPtr, paramsPtr, args.length]
-				);
-
-				// paramPtrs.forEach((paramPtr,i) => {
-				// 	Module.ccall(
-				// 		'vrzno_expose_efree'
-				// 		, 'number'
-				// 		, ['number']
-				// 		, [paramPtr]
-				// 	);
-				// });
-
-				// Module.ccall(
-				// 	'vrzno_expose_efree'
-				// 	, 'number'
-				// 	, ['number']
-				// 	, [paramsPtr]
-				// );
-
-				const marshalled = Module.zvalToJS(zvalPtr);
-
-				console.log({zvalPtr, paramsPtr, marshalled});
-
-				return marshalled;
-			};
+			target[property] = Module.callableToJs(funcPtr);
 
 			Module.fRegistry.register(target[property], zvalPtr);
 
@@ -358,7 +306,7 @@ static zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, z
 
 		console.log('READING', {aa: $0, target, property, result});
 
-		if(['function','object'].includes(typeof result))
+		if(result && ['function','object'].includes(typeof result))
 		{
 			let index = Module.targets.getId(result);
 
@@ -410,7 +358,7 @@ static void vrzno_write_dimension(zend_object *object, zval *offset, zval *newVa
 
 	if(zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr))
 	{
-		// Z_ADDREF_P(newValue);
+		Z_ADDREF_P(newValue);
 		// EM_ASM({ console.log('INC_ZVAL_1a', $0, $1); }, newValue, Z_REFCOUNTED_P(newValue));
 
 		EM_ASM({ (() =>{
@@ -421,63 +369,7 @@ static void vrzno_write_dimension(zend_object *object, zval *offset, zval *newVa
 
 			console.log('WRITING FUNCTION', {aa: $0, target, property, funcPtr});
 
-			target[property] = (...args) => {
-				console.log('CALLING FUNCTION', funcPtr, {targets: Module.targets});
-
-				const ptrs = args.map(a => Module.jsToZval(a) );
-
-				console.log(ptrs);
-
-				const paramsPtr = Module.ccall(
-					'vrzno_expose_create_params'
-					, 'number'
-					, ["number","number"]
-					, [args.length]
-				);
-
-				const paramPtrs = args.map(a => Module.jsToZval(a));
-
-				paramPtrs.forEach((paramPtr,i) => {
-					console.log({paramsPtr, i, paramPtr});
-					Module.ccall(
-						'vrzno_expose_set_param'
-						, 'number'
-						, ['number','number','number']
-						, [paramsPtr, i, paramPtr]
-					);
-				});
-
-				console.log({paramsPtr});
-
-				const zvalPtr = Module.ccall(
-					'vrzno_exec_callback'
-					, 'number'
-					, ['number','number','number']
-					, [funcPtr, paramsPtr, args.length]
-				);
-
-				// paramPtrs.forEach((paramPtr,i) => {
-				// 	Module.ccall(
-				// 		'vrzno_expose_efree'
-				// 		, 'number'
-				// 		, ['number']
-				// 		, [paramPtr]
-				// 	);
-				// });
-
-				// Module.ccall(
-				// 	'vrzno_expose_efree'
-				// 	, 'number'
-				// 	, ['number']
-				// 	, [paramsPtr]
-				// );
-
-				const marshalled = Module.zvalToJS(zvalPtr);
-
-				console.log({zvalPtr, paramsPtr, marshalled});
-
-				return marshalled;
-			};
+			target[property] = Module.callableToJs(funcPtr);
 
 			Module.fRegistry.register(target[property], zvalPtr);
 
@@ -693,7 +585,7 @@ static zend_string *vrzno_get_class_name(zend_object *object)
 	char *className = EM_ASM_INT({
 
 		const target = Module.targets.get($0) || globalThis;
-		const name   = target.constructor.name;
+		const name   = (target.constructor && target.constructor.name) || 'Object';
 		console.log('CLASSNAME', {target, id:$0, name});
 
 		const len     = lengthBytesUTF8(name) + 1;
@@ -706,7 +598,7 @@ static zend_string *vrzno_get_class_name(zend_object *object)
 	}, targetId);
 
 	zend_string *retVal = zend_string_init(className, strlen(className), 0);
-	free(retVal);
+	free(className);
 
 	return retVal;
 }
@@ -786,16 +678,16 @@ PHP_METHOD(Vrzno, __call)
 			args.push(Module.zvalToJS(argv + i * size));
 		}
 
-		console.log('CALLING', {aa: $0, target, method_name, args, targets: Module.targets});
+		console.log('CALLING', {aa: $0, target, method_name, args});
 
-		if(argc === 1
-			&& method_name === 'then'
-			&& target instanceof Promise
-			&& args[0] instanceof Promise
-		){
-			const jsRet = args[0][method_name](...args);
-			return Module.jsToZval(jsRet);
-		}
+		// if(argc === 1
+		// 	&& method_name === 'then'
+		// 	&& target instanceof Promise
+		// 	&& args[0] instanceof Promise
+		// ){
+		// 	const jsRet = args[0][method_name](...args);
+		// 	return Module.jsToZval(jsRet);
+		// }
 
 		const jsRet = target[method_name](...args);
 		return Module.jsToZval(jsRet);
@@ -804,9 +696,10 @@ PHP_METHOD(Vrzno, __call)
 
 	if(js_argc)
 	{
-		efree(zvalPtrs);
+		// efree(zvalPtrs);
 	}
 
+	ZVAL_UNDEF(return_value);
 	ZVAL_COPY(return_value, js_ret);
 }
 
@@ -825,8 +718,6 @@ PHP_METHOD(Vrzno, __invoke)
 	ZEND_PARSE_PARAMETERS_START(0, -1)
 		Z_PARAM_VARIADIC('*', js_argv, js_argc)
 	ZEND_PARSE_PARAMETERS_END();
-
-	php_debug_zval_dump(js_argv, 2);
 
 	int size = sizeof(zval);
 
@@ -859,15 +750,16 @@ PHP_METHOD(Vrzno, __invoke)
 			args.push(Module.zvalToJS(argv + i * size));
 		}
 
-		console.log('ICALLING', {aa: $0, target, args, targets: Module.targets});
+		console.log('ICALLING', {aa: $0, target, args});
 
 		const jsRet = target(...args);
 		return Module.jsToZval(jsRet);
 
 	}, targetId, zvalPtrs, js_argc, size);
 
-	efree(zvalPtrs);
+	// efree(zvalPtrs);
 
+	ZVAL_UNDEF(return_value);
 	ZVAL_COPY(return_value, js_ret);
 }
 
@@ -899,6 +791,7 @@ PHP_METHOD(Vrzno, __get)
 
 	}, targetId, js_property_name);
 
+	ZVAL_UNDEF(return_value);
 	ZVAL_COPY(return_value, js_ret);
 }
 

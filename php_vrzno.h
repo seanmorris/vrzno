@@ -18,6 +18,8 @@ extern PHPAPI int vrzno_del_callback(zend_function *fptr);
 PHP_FUNCTION(vrzno_eval);
 PHP_FUNCTION(vrzno_run);
 PHP_FUNCTION(vrzno_timeout);
+PHP_FUNCTION(vrzno_new);
+PHP_FUNCTION(vrzno_import);
 
 PHP_METHOD(Vrzno, addeventlistener);
 PHP_METHOD(Vrzno, removeeventlistener);
