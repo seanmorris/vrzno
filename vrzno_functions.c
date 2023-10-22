@@ -58,7 +58,6 @@ PHP_FUNCTION(vrzno_eval)
 PHP_FUNCTION(vrzno_run)
 {
 	zend_string      *retval;
-	php_json_encoder  encoder;
 	zend_long         opt = 0;
 
 	char   *js_funcname     = "";
@@ -73,6 +72,7 @@ PHP_FUNCTION(vrzno_run)
 
 	smart_str buf = {0};
 
+	php_json_encoder  encoder;
 	php_json_encode_init(&encoder);
 	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
 	php_json_encode_zval(&buf, js_argv, opt, &encoder);

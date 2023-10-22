@@ -30,8 +30,12 @@
 #include "vrzno_expose.c"
 #include "vrzno_functions.c"
 
-
 PHP_RINIT_FUNCTION(vrzno)
+{
+	return SUCCESS;
+}
+
+PHP_MINIT_FUNCTION(vrzno)
 {
 	zend_class_entry ce;
 
@@ -57,81 +61,156 @@ PHP_RINIT_FUNCTION(vrzno)
 	vrzno_object_handlers.write_dimension    = vrzno_write_dimension;
 	vrzno_object_handlers.has_dimension      = vrzno_has_dimension;
 	vrzno_object_handlers.unset_dimension    = vrzno_unset_dimension;
-	vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
+	// vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
 
 	EM_ASM({
 		console.log('Startup!');
 
 		Module.hasZval = Symbol('HAS_ZVAL');
+		Module.isTarget = Symbol('IS_TARGET');
 
-		Module.marshalObject = ((zvalPtr) => new Proxy({}, {
-			get: (target, prop, receiver) => {
-				console.log(target);
+		Module.fRegistry = Module.fRegistry || new FinalizationRegistry(zvalPtr => {
+			console.log('Garbage collecting zVal@'+zvalPtr);
+			Module.ccall(
+				'vrzno_expose_dec_refcount'
+				, 'number'
+				, ['number']
+				, [zvalPtr]
+			);
+		});
 
-				if(target[prop])
-				{
-					return target[prop];
-				}
+		Module.marshalObject = ((zvalPtr) => {
+			const nativeTarget = Module.ccall(
+				'vrzno_expose_zval_is_target'
+				, 'number'
+				, ['number']
+				, [zvalPtr]
+			);
 
-				const len     = lengthBytesUTF8(prop) + 1;
-				const namePtr = _malloc(len);
+			// console.log({nativeTarget, target: Module.targets.get(nativeTarget)});
 
-				stringToUTF8(prop, namePtr, len);
+			if(nativeTarget && Module.targets.hasId(nativeTarget))
+			{
+				return Module.targets.get(nativeTarget);
+			}
 
-				proxy = Module.zvalToJS(Module.ccall(
-					'vrzno_expose_property_pointer'
-					, 'number'
-					, ['number', 'number']
-					, [zvalPtr, namePtr]
-				));
+			const proxy = new Proxy({}, {
+				ownKeys: (target) => {
 
-				_free(namePtr);
+					// console.log('KEYS', target);
 
-				if(typeof proxy === 'object')
-				{
-					Module.ccall(
-						'vrzno_expose_inc_refcount'
+					const keysLoc = Module.zvalToJS(Module.ccall(
+						'vrzno_expose_object_keys'
 						, 'number'
 						, ['number']
 						, [zvalPtr]
+					));
+
+					const keys = [];
+
+					if(keysLoc)
+					{
+						const json = UTF8ToString(keysLoc);
+
+						// console.log(json);
+
+						keys.push(...JSON.parse(json));
+					}
+
+					keys.push(...Reflect.ownKeys(target));
+
+					return keys;
+				},
+				get: (target, prop, receiver) => {
+
+					if(typeof prop !== 'strinf')
+					{
+						return target[prop];
+					}
+
+					// console.log(target);
+
+					if(target[prop])
+					{
+						return target[prop];
+					}
+
+					const len     = lengthBytesUTF8(prop) + 1;
+					const namePtr = _malloc(len);
+
+					stringToUTF8(prop, namePtr, len);
+
+					const retPtr = Module.ccall(
+						'vrzno_expose_property_pointer'
+						, 'number'
+						, ['number', 'number']
+						, [zvalPtr, namePtr]
 					);
 
-					Module.fRegistry.register(proxy, zvalPtr);
+					proxy = Module.zvalToJS(retPtr);
+
+					if(!Module.targets.has(proxy))
+					{
+						// Module.ccall(
+						// 	'vrzno_expose_inc_refcount'
+						// 	, 'number'
+						// 	, ['number']
+						// 	, [retPtr]
+						// );
+
+						proxy[Module.hasZval] = retPtr;
+
+						Module.fRegistry.register(proxy, retPtr, proxy);
+					}
+
+					_free(namePtr);
+
+					return proxy;
 				}
+			});
 
-				return proxy;
+			if(!Module.targets.has(proxy))
+			{
+				// Module.ccall(
+				// 	'vrzno_expose_inc_refcount'
+				// 	, 'number'
+				// 	, ['number']
+				// 	, [zvalPtr]
+				// );
+
+				proxy[Module.hasZval] = zvalPtr;
+
+				Module.fRegistry.register(proxy, zvalPtr, proxy);
 			}
-		}));
+		});
 
-		Module.callableToJs = Module.callableToJs || (funcPtr => {
+		Module.callableToJs = Module.callableToJs || ((funcPtr) => {
 			console.log('WRAPPING FUNCTION', funcPtr);
 			return (...args) => {
 				console.log('CALLING FUNCTION', funcPtr);
 
-				const ptrs = args.map(a => Module.jsToZval(a) );
+				let paramPtrs = [], paramsPtr = null;
 
-				console.log({ptrs,args});
-
-				const paramsPtr = Module.ccall(
-					'vrzno_expose_create_params'
-					, 'number'
-					, ["number","number"]
-					, [args.length]
-				);
-
-				const paramPtrs = args.map(a => Module.jsToZval(a));
-
-				paramPtrs.forEach((paramPtr,i) => {
-					console.log({paramsPtr, i, paramPtr});
-					Module.ccall(
-						'vrzno_expose_set_param'
+				if(args.length)
+				{
+					paramsPtr = Module.ccall(
+						'vrzno_expose_create_params'
 						, 'number'
-						, ['number','number','number']
-						, [paramsPtr, i, paramPtr]
+						, ["number","number"]
+						, [args.length]
 					);
-				});
 
-				console.log({paramsPtr});
+					paramPtrs = args.map(a => Module.jsToZval(a));
+
+					paramPtrs.forEach((paramPtr,i) => {
+						Module.ccall(
+							'vrzno_expose_set_param'
+							, 'number'
+							, ['number','number','number']
+							, [paramsPtr, i, paramPtr]
+						);
+					});
+				}
 
 				const zvalPtr = Module.ccall(
 					'vrzno_exec_callback'
@@ -140,27 +219,32 @@ PHP_RINIT_FUNCTION(vrzno)
 					, [funcPtr, paramsPtr, args.length]
 				);
 
-				// paramPtrs.forEach((paramPtr,i) => {
-				// 	Module.ccall(
-				// 		'vrzno_expose_efree'
-				// 		, 'number'
-				// 		, ['number']
-				// 		, [paramPtr]
-				// 	);
-				// });
+				if(args.length)
+				{
+					paramPtrs.forEach((paramPtr,i) => {
+						console.log({paramPtr, i});
+						Module.ccall(
+							'vrzno_expose_dec_refcount'
+							, 'number'
+							, ['number']
+							, [paramPtr]
+						);
+					});
 
-				// Module.ccall(
-				// 	'vrzno_expose_efree'
-				// 	, 'number'
-				// 	, ['number']
-				// 	, [paramsPtr]
-				// );
+					console.log({paramsPtr});
+					Module.ccall(
+						'vrzno_expose_efree'
+						, 'number'
+						, ['number']
+						, [paramsPtr]
+					);
+				}
 
-				const marshalled = Module.zvalToJS(zvalPtr);
-
-				console.log({zvalPtr, paramsPtr, marshalled});
-
-				return marshalled;
+				if(zvalPtr)
+				{
+					const marshalled = Module.zvalToJS(zvalPtr);
+					return marshalled;
+				}
 		}});
 
 		Module.zvalToJS = Module.zvalToJS || (zvalPtr => {
@@ -177,7 +261,7 @@ PHP_RINIT_FUNCTION(vrzno)
 			const callable = Module.ccall(
 				'vrzno_expose_callable'
 				, 'number'
-				, ['number', 'number']
+				, ['number']
 				, [zvalPtr]
 			);
 
@@ -187,7 +271,11 @@ PHP_RINIT_FUNCTION(vrzno)
 			{
 				const wrapped = Module.callableToJs(callable);
 
+				console.log({callable});
+
 				wrapped[ Module.hasZval ] = zvalPtr;
+
+				Module.fRegistry.register(wrapped, zvalPtr, wrapped);
 
 				return wrapped;
 			}
@@ -266,14 +354,7 @@ PHP_RINIT_FUNCTION(vrzno)
 				case IS_OBJECT:
 					const proxy = Module.marshalObject(zvalPtr);
 
-					Module.ccall(
-						'vrzno_expose_inc_refcount'
-						, 'number'
-						, ['number']
-						, [zvalPtr]
-					);
-
-					Module.fRegistry.register(proxy, zvalPtr);
+					// Module.fRegistry.register(proxy, zvalPtr, proxy);
 
 					return proxy;
 					break;
@@ -290,13 +371,13 @@ PHP_RINIT_FUNCTION(vrzno)
 			{
 				if(value[ Module.hasZval ])
 				{
-					console.log('Using existing ZVAL FOR', value);
+					// console.log('Using existing ZVAL FOR', value);
 
 					return value[ Module.hasZval ];
 				}
 			}
 
-			console.log('CREATING ZVAL FOR', value);
+			// console.log('CREATING ZVAL FOR', value);
 
 			let zvalPtr;
 
@@ -309,7 +390,7 @@ PHP_RINIT_FUNCTION(vrzno)
 					, []
 				);
 
-				console.log('Undef:', {zvalPtr});
+				// console.log('Undef:', {zvalPtr});
 			}
 			else if(value === null)
 			{
@@ -320,7 +401,7 @@ PHP_RINIT_FUNCTION(vrzno)
 					, []
 				);
 
-				console.log('Bool:', {zvalPtr});
+				// console.log('Bool:', {zvalPtr});
 			}
 			else if([true, false].includes(value))
 			{
@@ -331,7 +412,7 @@ PHP_RINIT_FUNCTION(vrzno)
 					, [value]
 				);
 
-				console.log('Null:', {zvalPtr});
+				// console.log('Null:', {zvalPtr});
 			}
 			else if(value && ['function','object'].includes(typeof value))
 			{
@@ -340,31 +421,31 @@ PHP_RINIT_FUNCTION(vrzno)
 				if(!Module.targets.has(value))
 				{
 					index = Module.targets.add(value);
+
+					// Module.ccall(
+					// 	'vrzno_expose_inc_refcount'
+					// 	, 'number'
+					// 	, ['number']
+					// 	, [zvalPtr]
+					// );
 				}
 				else
 				{
 					index = Module.targets.getId(value);
 				}
 
-				console.log({index, value});
+				// console.log({index, value});
 
 				zvalPtr = Module.ccall(
 					'vrzno_expose_create_object_for_target'
 					, 'number'
-					, ["number"]
-					, [index]
-				);
-
-				Module.ccall(
-					'vrzno_expose_inc_refcount'
-					, 'number'
-					, ['number']
-					, [zvalPtr]
+					, ['number', 'number']
+					, [index, typeof value === 'function']
 				);
 
 				value[ Module.hasZval ] = zvalPtr;
 
-				Module.fRegistry.register(value, zvalPtr);
+				Module.fRegistry.register(value, zvalPtr, value);
 			}
 			else if(typeof value === "number")
 			{
@@ -378,7 +459,7 @@ PHP_RINIT_FUNCTION(vrzno)
 						, [value]
 					);
 
-					console.log('Long:', {zvalPtr});
+					// console.log('Long:', {zvalPtr});
 				}
 				else if(Number.isFinite(value))
 				{
@@ -390,7 +471,7 @@ PHP_RINIT_FUNCTION(vrzno)
 						, [value]
 					);
 
-					console.log('Double:', {zvalPtr});
+					// console.log('Double:', {zvalPtr});
 				}
 			}
 			else if(typeof value === "string")
@@ -410,18 +491,142 @@ PHP_RINIT_FUNCTION(vrzno)
 
 				_free(strLoc);
 
-				console.log('String:', {zvalPtr});
+				// console.log('String:', {zvalPtr});
 			}
 
 			return zvalPtr;
+		});
+
+		Module.WeakerMap = Module.WeakerMap || (class WeakerMap
+		{
+			constructor(entries)
+			{
+				this.registry = new FinalizationRegistry(held => this.delete(held));
+				this.map = new Map;
+				entries && entries.forEach(([key, value]) => this.set(key, value));
+			}
+
+			get size()
+			{
+				return this.map.size;
+			}
+
+			clear()
+			{
+				this.map.clear();
+			}
+
+			delete(key)
+			{
+				this.map.delete(key);
+			}
+
+			[Symbol.iterator]()
+			{
+				const mapIterator = this.map[Symbol.iterator]();
+
+				return {
+					next: () => {
+						do
+						{
+							const entry = mapIterator.next();
+
+							if(entry.done)
+							{
+								return {done:true};
+							}
+
+							const [key, ref] = entry.value;
+
+							const value = ref.deref();
+
+							if(!value)
+							{
+								this.map.delete(key);
+								continue;
+							}
+
+							return {done: false, value: [key, value]};
+
+						} while(true);
+					}
+				};
+			}
+
+			entries()
+			{
+				return {[Symbol.iterator]: () => this[Symbol.iterator]()};
+			}
+
+			forEach(callback)
+			{
+				for(const [k,v] of this)
+				{
+					callback(v, k, this);
+				}
+			}
+
+			get(key)
+			{
+				if(!this.has(key))
+				{
+					return;
+				}
+
+				return this.map.get(key).deref();
+			}
+
+			has(key)
+			{
+				if(!this.map.has(key))
+				{
+					return false;
+				}
+
+				const result = this.map.get(key).deref();
+
+				if(!result)
+				{
+					this.map.delete(key);
+				}
+
+				return result;
+			}
+
+			keys()
+			{
+				return [...this].map(v => v[0]);
+			}
+
+			set(key, value)
+			{
+				if(typeof value !== 'function' && typeof value !== 'object')
+				{
+					throw new Error('WeakerMap values must be objects.');
+				}
+
+				if(this.map.has(key))
+				{
+					this.registry.unregister(this.get(key));
+				}
+
+				this.registry.register(value, key, value);
+
+				return this.map.set(key, new WeakRef(value));
+			}
+
+			values()
+			{
+				return [...this].map(v => v[1]);
+			}
 		});
 
 		Module.UniqueIndex = Module.UniqueIndex || (class UniqueIndex
 		{
 			constructor()
 			{
-				this.byInteger = new Map();
-				this.byObject  = new Map();
+				this.byObject  = new WeakMap();
+				this.byInteger = new Module.WeakerMap();
 
 				this.id = 0;
 
@@ -453,6 +658,17 @@ PHP_RINIT_FUNCTION(vrzno)
 						if(this.byObject.has(obj))
 						{
 							return this.byObject.get(obj);
+						}
+					}
+				});
+
+				Object.defineProperty(this, 'hasId', {
+					configurable: false
+					, writable:   false
+					, value: (address) => {
+						if(this.byInteger.has(address))
+						{
+							return this.byInteger.get(address);
 						}
 					}
 				});
@@ -517,7 +733,7 @@ zend_module_entry vrzno_module_entry = {
 	STANDARD_MODULE_HEADER,
 	"vrzno",
 	vrzno_functions,           /* zend_function_entry */
-	NULL,                      /* PHP_MINIT - Module initialization */
+	PHP_MINIT(vrzno),          /* PHP_MINIT - Module initialization */
 	NULL,                      /* PHP_MSHUTDOWN - Module shutdown */
 	PHP_RINIT(vrzno),          /* PHP_RINIT - Request initialization */
 	NULL,                      /* PHP_RSHUTDOWN - Request shutdown */
@@ -559,12 +775,12 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 		int i;
 		for(i = 0; i < argc; i++)
 		{
-			ZVAL_NULL(&params[i]);
+			ZVAL_UNDEF(&params[i]);
 			ZVAL_COPY(&params[i], argv[i]);
 		}
 	}
 
-	EM_ASM({ console.log('exec', $0, $1, $2) }, fptr, argv, argc);
+	// EM_ASM({ console.log('exec', $0, $1, $2) }, fptr, argv, argc);
 
 
 	if(zend_call_function(&fci, &fcc) == SUCCESS)

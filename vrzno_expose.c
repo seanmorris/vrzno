@@ -62,10 +62,10 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-	vrzno_object *vObj = vrzno_create_object_for_target(target_id);
+	vrzno_object *vObj = vrzno_create_object_for_target(target_id, (bool) isFunction);
 	ZVAL_OBJ(zv, &vObj->zo);
 	return zv;
 }
@@ -79,6 +79,61 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_params(int argc)
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_set_param(zval** zvals, int index, zval* arg)
 {
 	zvals[index] = arg;
+}
+
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_is_target(zval* zv)
+{
+	if(Z_TYPE_P(zv) != IS_OBJECT)
+	{
+		return 0;
+	}
+
+	if(Z_OBJCE_P(zv) != vrzno_class_entry)
+	{
+		return 0;
+	}
+
+	return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
+}
+
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
+{
+	if (Z_TYPE_P(zv) != IS_OBJECT)
+	{
+		return NULL;
+	}
+
+	HashTable *properties = Z_OBJPROP_P(zv);
+
+	if(!properties)
+	{
+		return NULL;
+	}
+
+	zval keys;
+	array_init(&keys);
+	zend_string *key;
+	zend_ulong	*index;
+
+	ZEND_HASH_FOREACH_KEY(properties, index, key) {
+		if(key)
+		{
+			add_next_index_string(&keys, ZSTR_VAL(key));
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	smart_str buf = {0};
+
+	php_json_encoder  encoder;
+	php_json_encode_init(&encoder);
+	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
+	php_json_encode_zval(&buf, &keys, 0, &encoder);
+
+	char *json = ZSTR_VAL(buf.s);
+
+	smart_str_0(&buf);
+
+	return json;
 }
 
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_dump(zval* zv)
@@ -110,6 +165,11 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
 	zend_fcall_info_cache fcc;
 	char *errstr = NULL;
 
+	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv) == vrzno_class_entry)
+	{
+		return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
+	}
+
 	if(zend_is_callable_ex(zv, NULL, 0, NULL, &fcc, &errstr))
 	{
 		return fcc.function_handler;
@@ -139,7 +199,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_type(zval *object, char *name)
 {
 	zval *rv = NULL;
 
-	EM_ASM({ console.log('TYPE_CHECK', $0, $1, $2, $3, $4, $5, $6); }, object, Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
+	// EM_ASM({ console.log('TYPE_CHECK', $0, $1, $2, $3, $4, $5, $6); }, object, Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 
@@ -156,7 +216,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_callable(zval *object, char *name
 {
 	zval *rv = NULL;
 
-	EM_ASM({ console.log('CALL_CHECK', $0, $1, $2, $3, $4, $5, $6); }, object, Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
+	// EM_ASM({ console.log('CALL_CHECK', $0, $1, $2, $3, $4, $5, $6); }, object, Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 
