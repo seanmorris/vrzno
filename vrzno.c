@@ -61,7 +61,7 @@ PHP_MINIT_FUNCTION(vrzno)
 	vrzno_object_handlers.write_dimension    = vrzno_write_dimension;
 	vrzno_object_handlers.has_dimension      = vrzno_has_dimension;
 	vrzno_object_handlers.unset_dimension    = vrzno_unset_dimension;
-	// vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
+	vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
 
 	EM_ASM({
 		console.log('Startup!');
@@ -70,431 +70,13 @@ PHP_MINIT_FUNCTION(vrzno)
 		Module.isTarget = Symbol('IS_TARGET');
 
 		Module.fRegistry = Module.fRegistry || new FinalizationRegistry(zvalPtr => {
-			console.log('Garbage collecting zVal@'+zvalPtr);
+			// console.log('Garbage collecting zVal@'+zvalPtr);
 			Module.ccall(
 				'vrzno_expose_dec_refcount'
 				, 'number'
 				, ['number']
 				, [zvalPtr]
 			);
-		});
-
-		Module.marshalObject = ((zvalPtr) => {
-			const nativeTarget = Module.ccall(
-				'vrzno_expose_zval_is_target'
-				, 'number'
-				, ['number']
-				, [zvalPtr]
-			);
-
-			// console.log({nativeTarget, target: Module.targets.get(nativeTarget)});
-
-			if(nativeTarget && Module.targets.hasId(nativeTarget))
-			{
-				return Module.targets.get(nativeTarget);
-			}
-
-			const proxy = new Proxy({}, {
-				ownKeys: (target) => {
-
-					// console.log('KEYS', target);
-
-					const keysLoc = Module.zvalToJS(Module.ccall(
-						'vrzno_expose_object_keys'
-						, 'number'
-						, ['number']
-						, [zvalPtr]
-					));
-
-					const keys = [];
-
-					if(keysLoc)
-					{
-						const json = UTF8ToString(keysLoc);
-
-						// console.log(json);
-
-						keys.push(...JSON.parse(json));
-					}
-
-					keys.push(...Reflect.ownKeys(target));
-
-					return keys;
-				},
-				get: (target, prop, receiver) => {
-
-					if(typeof prop !== 'strinf')
-					{
-						return target[prop];
-					}
-
-					// console.log(target);
-
-					if(target[prop])
-					{
-						return target[prop];
-					}
-
-					const len     = lengthBytesUTF8(prop) + 1;
-					const namePtr = _malloc(len);
-
-					stringToUTF8(prop, namePtr, len);
-
-					const retPtr = Module.ccall(
-						'vrzno_expose_property_pointer'
-						, 'number'
-						, ['number', 'number']
-						, [zvalPtr, namePtr]
-					);
-
-					proxy = Module.zvalToJS(retPtr);
-
-					if(!Module.targets.has(proxy))
-					{
-						// Module.ccall(
-						// 	'vrzno_expose_inc_refcount'
-						// 	, 'number'
-						// 	, ['number']
-						// 	, [retPtr]
-						// );
-
-						proxy[Module.hasZval] = retPtr;
-
-						Module.fRegistry.register(proxy, retPtr, proxy);
-					}
-
-					_free(namePtr);
-
-					return proxy;
-				}
-			});
-
-			if(!Module.targets.has(proxy))
-			{
-				// Module.ccall(
-				// 	'vrzno_expose_inc_refcount'
-				// 	, 'number'
-				// 	, ['number']
-				// 	, [zvalPtr]
-				// );
-
-				proxy[Module.hasZval] = zvalPtr;
-
-				Module.fRegistry.register(proxy, zvalPtr, proxy);
-			}
-		});
-
-		Module.callableToJs = Module.callableToJs || ((funcPtr) => {
-			console.log('WRAPPING FUNCTION', funcPtr);
-			return (...args) => {
-				console.log('CALLING FUNCTION', funcPtr);
-
-				let paramPtrs = [], paramsPtr = null;
-
-				if(args.length)
-				{
-					paramsPtr = Module.ccall(
-						'vrzno_expose_create_params'
-						, 'number'
-						, ["number","number"]
-						, [args.length]
-					);
-
-					paramPtrs = args.map(a => Module.jsToZval(a));
-
-					paramPtrs.forEach((paramPtr,i) => {
-						Module.ccall(
-							'vrzno_expose_set_param'
-							, 'number'
-							, ['number','number','number']
-							, [paramsPtr, i, paramPtr]
-						);
-					});
-				}
-
-				const zvalPtr = Module.ccall(
-					'vrzno_exec_callback'
-					, 'number'
-					, ['number','number','number']
-					, [funcPtr, paramsPtr, args.length]
-				);
-
-				if(args.length)
-				{
-					paramPtrs.forEach((paramPtr,i) => {
-						console.log({paramPtr, i});
-						Module.ccall(
-							'vrzno_expose_dec_refcount'
-							, 'number'
-							, ['number']
-							, [paramPtr]
-						);
-					});
-
-					console.log({paramsPtr});
-					Module.ccall(
-						'vrzno_expose_efree'
-						, 'number'
-						, ['number']
-						, [paramsPtr]
-					);
-				}
-
-				if(zvalPtr)
-				{
-					const marshalled = Module.zvalToJS(zvalPtr);
-					return marshalled;
-				}
-		}});
-
-		Module.zvalToJS = Module.zvalToJS || (zvalPtr => {
-			const IS_UNDEF  = 0;
-			const IS_NULL   = 1;
-			const IS_FALSE  = 2;
-			const IS_TRUE   = 3;
-			const IS_LONG   = 4;
-			const IS_DOUBLE = 5;
-			const IS_STRING = 6;
-			const IS_ARRAY  = 7;
-			const IS_OBJECT = 8;
-
-			const callable = Module.ccall(
-				'vrzno_expose_callable'
-				, 'number'
-				, ['number']
-				, [zvalPtr]
-			);
-
-			let valPtr;
-
-			if(callable)
-			{
-				const wrapped = Module.callableToJs(callable);
-
-				console.log({callable});
-
-				wrapped[ Module.hasZval ] = zvalPtr;
-
-				Module.fRegistry.register(wrapped, zvalPtr, wrapped);
-
-				return wrapped;
-			}
-
-			const type = Module.ccall(
-				'vrzno_expose_type'
-				, 'number'
-				, ['number']
-				, [zvalPtr]
-			);
-
-			switch(type)
-			{
-				case IS_UNDEF:
-					return undefined;
-					break;
-
-				case IS_NULL:
-					return null;
-					break;
-
-				case IS_TRUE:
-					return true;
-					break;
-
-				case IS_FALSE:
-					return false;
-					break;
-
-				case IS_LONG:
-					value = Module.ccall(
-						'vrzno_expose_long'
-						, 'number'
-						, ['number']
-						, [zvalPtr]
-					);
-
-					return value;
-					break;
-
-				case IS_DOUBLE:
-					valPtr = Module.ccall(
-						'vrzno_expose_double'
-						, 'number'
-						, ['number']
-						, [zvalPtr]
-					);
-
-					if(!valPtr)
-					{
-						return null;
-					}
-
-					return getValue(valPtr, 'double');
-					break;
-
-				case IS_STRING:
-					valPtr = Module.ccall(
-						'vrzno_expose_string'
-						, 'number'
-						, ['number']
-						, [zvalPtr]
-					);
-
-					if(!valPtr)
-					{
-						return null;
-					}
-
-					return UTF8ToString(valPtr);
-					break;
-
-				// case IS_ARRAY:
-				// 	break;
-
-				case IS_OBJECT:
-					const proxy = Module.marshalObject(zvalPtr);
-
-					// Module.fRegistry.register(proxy, zvalPtr, proxy);
-
-					return proxy;
-					break;
-
-				default:
-					return null;
-					break;
-			}
-		});
-
-		Module.jsToZval = Module.jsToZval || (value => {
-
-			if(value && ['function','object'].includes(typeof value))
-			{
-				if(value[ Module.hasZval ])
-				{
-					// console.log('Using existing ZVAL FOR', value);
-
-					return value[ Module.hasZval ];
-				}
-			}
-
-			// console.log('CREATING ZVAL FOR', value);
-
-			let zvalPtr;
-
-			if(typeof value === 'undefined')
-			{
-				zvalPtr = Module.ccall(
-					'vrzno_expose_create_undef'
-					, 'number'
-					, []
-					, []
-				);
-
-				// console.log('Undef:', {zvalPtr});
-			}
-			else if(value === null)
-			{
-				zvalPtr = Module.ccall(
-					'vrzno_expose_create_null'
-					, 'number'
-					, []
-					, []
-				);
-
-				// console.log('Bool:', {zvalPtr});
-			}
-			else if([true, false].includes(value))
-			{
-				zvalPtr = Module.ccall(
-					'vrzno_expose_create_bool'
-					, 'number'
-					, ["number"]
-					, [value]
-				);
-
-				// console.log('Null:', {zvalPtr});
-			}
-			else if(value && ['function','object'].includes(typeof value))
-			{
-				let index;
-
-				if(!Module.targets.has(value))
-				{
-					index = Module.targets.add(value);
-
-					// Module.ccall(
-					// 	'vrzno_expose_inc_refcount'
-					// 	, 'number'
-					// 	, ['number']
-					// 	, [zvalPtr]
-					// );
-				}
-				else
-				{
-					index = Module.targets.getId(value);
-				}
-
-				// console.log({index, value});
-
-				zvalPtr = Module.ccall(
-					'vrzno_expose_create_object_for_target'
-					, 'number'
-					, ['number', 'number']
-					, [index, typeof value === 'function']
-				);
-
-				value[ Module.hasZval ] = zvalPtr;
-
-				Module.fRegistry.register(value, zvalPtr, value);
-			}
-			else if(typeof value === "number")
-			{
-				if(Number.isInteger(value))
-				{
-					// Generate long
-					zvalPtr = Module.ccall(
-						'vrzno_expose_create_long'
-						, 'number'
-						, ["number"]
-						, [value]
-					);
-
-					// console.log('Long:', {zvalPtr});
-				}
-				else if(Number.isFinite(value))
-				{
-					// Generate double
-					zvalPtr = Module.ccall(
-						'vrzno_expose_create_double'
-						, 'number'
-						, ["number"]
-						, [value]
-					);
-
-					// console.log('Double:', {zvalPtr});
-				}
-			}
-			else if(typeof value === "string")
-			{
-				// Generate string zval
-				const len      = lengthBytesUTF8(value) + 1;
-				const strLoc   = _malloc(len);
-
-				stringToUTF8(value, strLoc, len);
-
-				zvalPtr = Module.ccall(
-					'vrzno_expose_create_string'
-					, 'number'
-					, ["number"]
-					, [strLoc]
-				);
-
-				_free(strLoc);
-
-				// console.log('String:', {zvalPtr});
-			}
-
-			return zvalPtr;
 		});
 
 		Module.WeakerMap = Module.WeakerMap || (class WeakerMap
@@ -621,12 +203,441 @@ PHP_MINIT_FUNCTION(vrzno)
 			}
 		});
 
+		Module.marshalObject = ((zvalPtr) => {
+			const nativeTarget = Module.ccall(
+				'vrzno_expose_zval_is_target'
+				, 'number'
+				, ['number']
+				, [zvalPtr]
+			);
+
+			// console.log({nativeTarget, target: Module.targets.get(nativeTarget)});
+
+			if(nativeTarget && Module.targets.hasId(nativeTarget))
+			{
+				return Module.targets.get(nativeTarget);
+			}
+
+			const proxy = new Proxy({}, {
+				ownKeys: (target) => {
+
+					// console.log('KEYS', target);
+
+					const keysLoc = Module.zvalToJS(Module.ccall(
+						'vrzno_expose_object_keys'
+						, 'number'
+						, ['number']
+						, [zvalPtr]
+					));
+
+					const keys = [];
+
+					if(keysLoc)
+					{
+						const json = UTF8ToString(keysLoc);
+
+						_free(keysLoc);
+
+						// console.log(json);
+
+						keys.push(...JSON.parse(json));
+					}
+
+					keys.push(...Reflect.ownKeys(target));
+
+					return keys;
+				},
+				get: (target, prop, receiver) => {
+					const len     = lengthBytesUTF8(prop) + 1;
+					const namePtr = _malloc(len);
+
+					stringToUTF8(prop, namePtr, len);
+
+					const retPtr = Module.ccall(
+						'vrzno_expose_property_pointer'
+						, 'number'
+						, ['number', 'number']
+						, [zvalPtr, namePtr]
+					);
+
+					proxy = Module.zvalToJS(retPtr);
+
+					proxy[Module.hasZval] = retPtr;
+
+					_free(namePtr);
+
+					return proxy;
+				}
+			});
+
+			if(!Module.targets.has(proxy))
+			{
+				proxy[Module.hasZval] = zvalPtr;
+
+				Module.targets.add(proxy);
+
+				Module.ccall(
+					'vrzno_expose_inc_refcount'
+					, 'number'
+					, ['number']
+					, [zvalPtr]
+				);
+
+				Module.fRegistry.register(proxy, zvalPtr, proxy);
+				// console.log('freg a: ', zvalPtr);
+			}
+		});
+
+		Module.callableToJs = Module.callableToJs || ( (funcPtr) => {
+
+			// if(Module.callables.has(funcPtr))
+			// {
+			// 	return Module.callables.get(funcPtr);
+			// }
+
+			// console.log('WRAPPING FUNCTION', funcPtr);
+
+			const wrapped = (...args) => {
+				// console.log('CALLING FUNCTION', funcPtr);
+
+				let paramPtrs = [], paramsPtr = null;
+
+				if(args.length)
+				{
+					paramsPtr = Module.ccall(
+						'vrzno_expose_create_params'
+						, 'number'
+						, ["number","number"]
+						, [args.length]
+					);
+
+					paramPtrs = args.map(a => Module.jsToZval(a));
+
+					paramPtrs.forEach((paramPtr,i) => {
+						Module.ccall(
+							'vrzno_expose_set_param'
+							, 'number'
+							, ['number','number','number']
+							, [paramsPtr, i, paramPtr]
+						);
+					});
+				}
+
+				const zvalPtr = Module.ccall(
+					'vrzno_exec_callback'
+					, 'number'
+					, ['number','number','number']
+					, [funcPtr, paramsPtr, args.length]
+				);
+
+				if(args.length)
+				{
+					// paramPtrs.forEach((paramPtr,i) => {
+					// 	console.log({paramPtr, i});
+					// });
+
+					// console.log({paramsPtr});
+
+					Module.ccall(
+						'vrzno_expose_efree'
+						, 'number'
+						, ['number']
+						, [paramsPtr]
+					);
+				}
+
+				if(zvalPtr)
+				{
+					return Module.zvalToJS(zvalPtr);
+				}
+			};
+
+			Module.callables.set(funcPtr, wrapped);
+
+			return wrapped;
+		});
+
+		Module.zvalToJS = Module.zvalToJS || (zvalPtr => {
+			const IS_UNDEF  = 0;
+			const IS_NULL   = 1;
+			const IS_FALSE  = 2;
+			const IS_TRUE   = 3;
+			const IS_LONG   = 4;
+			const IS_DOUBLE = 5;
+			const IS_STRING = 6;
+			const IS_ARRAY  = 7;
+			const IS_OBJECT = 8;
+
+			const callable = Module.ccall(
+				'vrzno_expose_callable'
+				, 'number'
+				, ['number']
+				, [zvalPtr]
+			);
+
+			let valPtr;
+
+			if(callable)
+			{
+				const wrapped = Module.callableToJs(callable);
+
+				// console.log({callable});
+
+				if(!Module.targets.has(wrapped))
+				{
+					Module.targets.add(wrapped);
+
+					wrapped[ Module.hasZval ] = zvalPtr;
+
+					Module.ccall(
+						'vrzno_expose_inc_refcount'
+						, 'number'
+						, ['number']
+						, [zvalPtr]
+					);
+
+					Module.fRegistry.register(wrapped, zvalPtr, wrapped);
+					// console.log('freg b: ', zvalPtr, callable);
+				}
+
+				return wrapped;
+			}
+
+			const type = Module.ccall(
+				'vrzno_expose_type'
+				, 'number'
+				, ['number']
+				, [zvalPtr]
+			);
+
+			switch(type)
+			{
+				case IS_UNDEF:
+					return undefined;
+					break;
+
+				case IS_NULL:
+					return null;
+					break;
+
+				case IS_TRUE:
+					return true;
+					break;
+
+				case IS_FALSE:
+					return false;
+					break;
+
+				case IS_LONG:
+					value = Module.ccall(
+						'vrzno_expose_long'
+						, 'number'
+						, ['number']
+						, [zvalPtr]
+					);
+
+					return value;
+					break;
+
+				case IS_DOUBLE:
+					valPtr = Module.ccall(
+						'vrzno_expose_double'
+						, 'number'
+						, ['number']
+						, [zvalPtr]
+					);
+
+					if(!valPtr)
+					{
+						return null;
+					}
+
+					return getValue(valPtr, 'double');
+					break;
+
+				case IS_STRING:
+					valPtr = Module.ccall(
+						'vrzno_expose_string'
+						, 'number'
+						, ['number']
+						, [zvalPtr]
+					);
+
+					if(!valPtr)
+					{
+						return null;
+					}
+
+					return UTF8ToString(valPtr);
+					break;
+
+				// case IS_ARRAY:
+				// 	break;
+
+				case IS_OBJECT:
+					const proxy = Module.marshalObject(zvalPtr);
+
+					if(Module.targets.hasId(zvalPtr))
+					{
+						// Module.fRegistry.unregister(Module.targets.get(zvalPtr));
+					}
+
+					// Module.fRegistry.register(proxy, zvalPtr, proxy);
+
+					return proxy;
+					break;
+
+				default:
+					return null;
+					break;
+			}
+		});
+
+		Module.jsToZval = Module.jsToZval || (value => {
+
+			if(value && ['function','object'].includes(typeof value))
+			{
+				if(value[ Module.hasZval ])
+				{
+					// console.log('Using existing ZVAL FOR', value);
+
+					return value[ Module.hasZval ];
+				}
+			}
+
+			// console.log('CREATING ZVAL FOR', value);
+
+			let zvalPtr;
+
+			if(typeof value === 'undefined')
+			{
+				zvalPtr = Module.ccall(
+					'vrzno_expose_create_undef'
+					, 'number'
+					, []
+					, []
+				);
+
+				// console.log('Undef:', {zvalPtr});
+			}
+			else if(value === null)
+			{
+				zvalPtr = Module.ccall(
+					'vrzno_expose_create_null'
+					, 'number'
+					, []
+					, []
+				);
+
+				// console.log('Bool:', {zvalPtr});
+			}
+			else if([true, false].includes(value))
+			{
+				zvalPtr = Module.ccall(
+					'vrzno_expose_create_bool'
+					, 'number'
+					, ["number"]
+					, [value]
+				);
+
+				// console.log('Null:', {zvalPtr});
+			}
+			else if(value && ['function','object'].includes(typeof value))
+			{
+				let index, existed;
+
+				if(!Module.targets.has(value))
+				{
+					index = Module.targets.add(value);
+					existed = false;
+				}
+				else
+				{
+					index = Module.targets.getId(value);
+					existed = true;
+				}
+
+				// console.log({index, value});
+
+				zvalPtr = Module.ccall(
+					'vrzno_expose_create_object_for_target'
+					, 'number'
+					, ['number', 'number']
+					, [index, typeof value === 'function']
+				);
+
+				value[ Module.hasZval ] = zvalPtr;
+
+				if(!existed)
+				{
+					Module.ccall(
+						'vrzno_expose_inc_refcount'
+						, 'number'
+						, ['number']
+						, [zvalPtr]
+					);
+
+					Module.fRegistry.register(value, zvalPtr, value);
+					// console.log('freg c: ', zvalPtr);
+				}
+
+			}
+			else if(typeof value === "number")
+			{
+				if(Number.isInteger(value))
+				{
+					// Generate long
+					zvalPtr = Module.ccall(
+						'vrzno_expose_create_long'
+						, 'number'
+						, ["number"]
+						, [value]
+					);
+
+					// console.log('Long:', {zvalPtr});
+				}
+				else if(Number.isFinite(value))
+				{
+					// Generate double
+					zvalPtr = Module.ccall(
+						'vrzno_expose_create_double'
+						, 'number'
+						, ["number"]
+						, [value]
+					);
+
+					// console.log('Double:', {zvalPtr});
+				}
+			}
+			else if(typeof value === "string")
+			{
+				// Generate string zval
+				const len      = lengthBytesUTF8(value) + 1;
+				const strLoc   = _malloc(len);
+
+				stringToUTF8(value, strLoc, len);
+
+				zvalPtr = Module.ccall(
+					'vrzno_expose_create_string'
+					, 'number'
+					, ["number"]
+					, [strLoc]
+				);
+
+				_free(strLoc);
+			}
+
+			return zvalPtr;
+		});
+
 		Module.UniqueIndex = Module.UniqueIndex || (class UniqueIndex
 		{
 			constructor()
 			{
 				this.byObject  = new WeakMap();
+				// this.byObject  = new Map();
 				this.byInteger = new Module.WeakerMap();
+				this.tacked    = new Map();
 
 				this.id = 0;
 
@@ -709,8 +720,43 @@ PHP_MINIT_FUNCTION(vrzno)
 						}
 					}
 				});
+
+				Object.defineProperty(this, 'tack', {
+					configurable: false
+					, writable:   false
+					, value:      (target) => {
+						if(!this.tacked.has(target))
+						{
+							this.tacked.set(target, 1);
+						}
+						else
+						{
+							this.tacked.set(target, 1 + this.tacked.get(target));
+						}
+					}
+				});
+
+				Object.defineProperty(this, 'untack', {
+					configurable: false
+					, writable:   false
+					, value:      (target) => {
+						if(!this.tacked.has(target))
+						{
+							return;
+						}
+
+						this.tacked.set(target, -1 + this.tacked.get(target));
+
+						if(this.tacked.get(target) <= 0)
+						{
+							return this.tacked.delete(target);
+						}
+					}
+				});
 			}
 		});
+
+		Module.callables = Module.callables || new Module.WeakerMap();
 
 		Module.targets = Module.targets || new Module.UniqueIndex;
 	});
@@ -755,12 +801,11 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 	zend_fcall_info_cache fcc;
 
 	zval params[argc];
-	zval retval;
 
 	fci.size             = sizeof(fci);
 	ZVAL_UNDEF(&fci.function_name);
 	fci.object           = NULL;
-	fci.retval           = &retval;
+	fci.retval           = (zval*) emalloc(sizeof(zval));
 	fci.params           = params;
 	fci.named_params     = 0;
 	fci.param_count      = argc;
@@ -775,8 +820,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 		int i;
 		for(i = 0; i < argc; i++)
 		{
-			ZVAL_UNDEF(&params[i]);
-			ZVAL_COPY(&params[i], argv[i]);
+			params[i] = *argv[i];
 		}
 	}
 
@@ -785,12 +829,14 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 
 	if(zend_call_function(&fci, &fcc) == SUCCESS)
 	{
-		zval *retZval = (zval*) emalloc(sizeof(zval));
+		// zval *retZval = (zval*) emalloc(sizeof(zval));
 
-		ZVAL_UNDEF(retZval);
-		ZVAL_COPY(retZval, &retval);
+		// ZVAL_UNDEF(retZval);
+		// ZVAL_COPY_VALUE(retZval, &retval);
 
-		return retZval;
+		// return retZval;
+
+		return fci.retval;
 	}
 
 	return NULL;

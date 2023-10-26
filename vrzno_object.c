@@ -13,38 +13,50 @@ static inline vrzno_object *vrzno_fetch_object(zend_object *obj) {
 
 static struct _zend_object *vrzno_create_object(zend_class_entry *class_type)
 {
-    zend_object  *retZObj  = zend_object_alloc(sizeof(vrzno_object), class_type);
-	vrzno_object *retVrzno = vrzno_fetch_object(retZObj);
+    vrzno_object *vrzno = zend_object_alloc(sizeof(vrzno_object), class_type);
 
-    zend_object_std_init(&retVrzno->zo, class_type);
+    zend_object_std_init(&vrzno->zo, class_type);
 
-    retVrzno->zo.handlers = &vrzno_object_handlers;
-    retVrzno->targetId = (long) EM_ASM_INT({ return Module.targets.add(globalThis); });
+    vrzno->zo.handlers = &vrzno_object_handlers;
+    vrzno->targetId = (long) EM_ASM_INT({ return Module.targets.add(globalThis); });
 
-	return &retVrzno->zo;
+	return &vrzno->zo;
 }
 
 static vrzno_object *vrzno_create_object_for_target(int target_id, bool isFunction)
 {
-    zend_object  *retZObj  = zend_object_alloc(sizeof(vrzno_object), vrzno_class_entry);
-	vrzno_object *retVrzno = vrzno_fetch_object(retZObj);
+    vrzno_object *vrzno = zend_object_alloc(sizeof(vrzno_object), vrzno_class_entry);
 
-    zend_object_std_init(&retVrzno->zo, vrzno_class_entry);
+    zend_object_std_init(&vrzno->zo, vrzno_class_entry);
 
-    retVrzno->zo.handlers = &vrzno_object_handlers;
-    retVrzno->targetId = target_id;
-	retVrzno->isFunction = isFunction;
+    vrzno->zo.handlers = &vrzno_object_handlers;
+    vrzno->targetId = target_id;
+	vrzno->isFunction = (bool) isFunction;
 
-	return retVrzno;
+	// EM_ASM({
+	// 	const target = Module.targets.get($0);
+	// 	if(!target) return;
+	// 	Module.targets.tack(target);
+	// }, vrzno->targetId);
+
+	return vrzno;
 }
 
 static void vrzno_object_free(zend_object *zobj)
 {
 	vrzno_object *vrzno = vrzno_fetch_object(zobj);
 
-	EM_ASM({ console.log('FREE', $0, $1) }, vrzno, vrzno->targetId);
+	// EM_ASM({
+	// 	const target = Module.targets.get($0);
+	// 	if(!target) return;
+	// 	Module.targets.untack();
+	// }, vrzno->targetId);
 
-	vrzno->targetId = NULL;
+	// EM_ASM({
+	// 	console.log('FREE', $0, $1, $2);
+	// 	// Module.fRegistry.unregister(Module.targets.get($1));
+	// 	// Module.targets.remove($1);
+	// }, vrzno, zobj, &vrzno->zo);
 
 	zend_object_std_dtor(zobj);
 }
@@ -115,7 +127,12 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 
 				result[Module.hasZval] = zvalPtr;
 
-				Module.fRegistry.register(result, zvalPtr);
+				if(Module.targets.hasId(index))
+				{
+					// Module.fRegistry.unregister(Module.targets.get(index));
+				}
+
+				// Module.fRegistry.register(result, zvalPtr, result);
 			}
 
 			// console.log({index, result});
@@ -134,7 +151,7 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 		return rv;
 	}
 
-	bool isFunction = EM_ASM_INT({ 'function' === typeof (Module.targets.get($0)); }, targetId);
+	bool isFunction = (bool) EM_ASM_INT({ 'function' === typeof (Module.targets.get($0)); }, targetId);
 
 	vrzno_object *retVrzno = vrzno_create_object_for_target(obj_result, isFunction);
 
@@ -157,12 +174,14 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 		// console.log('WRITING', {aa: $0, target, property, newValue});
 	})() }, targetId, name, newValue);
 
+	// php_debug_zval_dump(newValue, 5);
+
 	char *errstr = NULL;
 	zend_fcall_info_cache fcc;
 
 	bool isCallable = zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr);
 
-	if(Z_OBJCE_P(newValue) == vrzno_class_entry)
+	if(Z_TYPE_P(newValue) == IS_OBJECT && Z_OBJCE_P(newValue) == vrzno_class_entry)
 	{
 		isCallable = vrzno_fetch_object(Z_OBJ_P(newValue))->isFunction;
 	}
@@ -182,7 +201,7 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 
 			target[property] = Module.callableToJs(funcPtr, null);
 
-			// Module.fRegistry.register(target[property], zvalPtr);
+			// Module.fRegistry.register(target[property], zvalPtr, target[property]);
 
 		})() }, targetId, name, fcc.function_handler, newValue, fcc.function_handler->common.num_args);
 
@@ -333,7 +352,12 @@ static zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, z
 
 				result[Module.hasZval] = zvalPtr;
 
-				Module.fRegistry.register(result, zvalPtr);
+				if(Module.targets.hasId(index))
+				{
+					// Module.fRegistry.unregister(Module.targets.get(index));
+				}
+
+				// Module.fRegistry.register(result, zvalPtr, result);
 			}
 
 			// console.log({index, result});
@@ -352,7 +376,7 @@ static zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, z
 		return rv;
 	}
 
-	bool isFunction = EM_ASM_INT({ 'function' === typeof (Module.targets.get($0)); }, targetId);
+	bool isFunction = (bool) EM_ASM_INT({ 'function' === typeof (Module.targets.get($0)); }, targetId);
 
 	vrzno_object *retVrzno = vrzno_create_object_for_target(obj_result, isFunction);
 
@@ -400,12 +424,14 @@ static void vrzno_write_dimension(zend_object *object, zval *offset, zval *newVa
 
 			target[property] = Module.callableToJs(funcPtr);
 
-			// Module.fRegistry.register(target[property], zvalPtr);
+			// Module.fRegistry.register(target[property], zvalPtr, target[property]);
 
 		})() }, targetId, index, fcc.function_handler, newValue);
 
 		return;
 	}
+
+	// php_debug_zval_dump(newValue, 5);
 
 	switch(Z_TYPE_P(newValue))
 	{
@@ -687,7 +713,7 @@ PHP_METHOD(Vrzno, __call)
 
 		ZEND_HASH_PACKED_FOREACH_VAL(js_argv, data) {
 			ZVAL_NULL(&zvalPtrs[i]);
-			ZVAL_COPY(&zvalPtrs[i], data);
+			ZVAL_COPY_VALUE(&zvalPtrs[i], data);
 			i++;
 		} ZEND_HASH_FOREACH_END();
 	}
@@ -709,13 +735,15 @@ PHP_METHOD(Vrzno, __call)
 			args.push(Module.zvalToJS(argv + i * size));
 		}
 
+		// console.log({args});
+
 		const jsRet = target[method_name](...args);
 
 		// console.log({jsRet});
 
 		const retZval = Module.jsToZval(jsRet);
 
-		console.log({retZval});
+		// console.log({retZval});
 
 		return retZval;
 
@@ -723,22 +751,16 @@ PHP_METHOD(Vrzno, __call)
 
 	if(js_argc)
 	{
-		EM_ASM({ console.log('CALL - FREE', $0) }, zvalPtrs);
-		efree(zvalPtrs);
+		// EM_ASM({ console.log('CALL - FREE', $0) }, zvalPtrs);
+		// efree(zvalPtrs);
 	}
-
-	EM_ASM({ console.log('CALL - UNDEF', $0) }, return_value);
-	ZVAL_UNDEF(return_value);
 
 	if(!js_ret)
 	{
 		return;
 	}
 
-	EM_ASM({ console.log('CALL - COPY', $0, $1) }, return_value, js_ret);
-	ZVAL_COPY(return_value, js_ret);
-
-	EM_ASM({ console.log('CALL - DONE', $0, $1) }, return_value, js_ret);
+	RETURN_ZVAL(js_ret, 0, 0);
 }
 
 PHP_METHOD(Vrzno, __invoke)
@@ -800,7 +822,7 @@ PHP_METHOD(Vrzno, __invoke)
 
 	if(js_argc)
 	{
-		efree(zvalPtrs);
+		// efree(zvalPtrs);
 	}
 
 	ZVAL_UNDEF(return_value);

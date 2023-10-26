@@ -1,13 +1,25 @@
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_refcount(zval *zv)
 {
+	// EM_ASM({ console.log('INC ', $0, $1); }, zv, Z_REFCOUNT_P(zv));
 	Z_ADDREF_P(zv);
 	return NULL;
 }
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_refcount(zval *zv)
 {
+	// EM_ASM({ console.log('DEC ', $0, $1); }, zv, Z_REFCOUNT_P(zv));
 	Z_DELREF_P(zv);
 	return NULL;
+}
+
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_refcount(zval *zv)
+{
+	return Z_REFCOUNT_P(zv);
+}
+
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(long address)
+{
+	efree(address);
 }
 
 
@@ -139,20 +151,6 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_dump(zval* zv)
 {
 	php_debug_zval_dump(zv, 1);
-}
-
-// int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_vrzno_object(long target)
-// {
-// }
-
-// void EMSCRIPTEN_KEEPALIVE vrzno_expose_ptor_dtor(zval *zv)
-// {
-// 	zval_ptr_dtor(zv);
-// }
-
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(long address)
-{
-	efree(address);
 }
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_type(zval *zv)
@@ -287,12 +285,6 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_pointer(zval *object, char *name)
 	zval *rv = NULL;
 
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
-	// if (data == &EG(uninitialized_zval)) {
-	// 	return NULL;
-	// }
-
-	// ZVAL_DEREF(data);
 
 	return data;
 }
