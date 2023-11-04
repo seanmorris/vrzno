@@ -44,7 +44,7 @@ static vrzno_object *vrzno_create_object_for_target(int target_id, bool isFuncti
 
 static void vrzno_object_free(zend_object *zobj)
 {
-	vrzno_object *vrzno = vrzno_fetch_object(zobj);
+	// vrzno_object *vrzno = vrzno_fetch_object(zobj);
 
 	// EM_ASM({
 	// 	const target = Module.targets.get($0);
@@ -64,19 +64,37 @@ static void vrzno_object_free(zend_object *zobj)
 zval *vrzno_read_property(zend_object *object, zend_string *member, int type, void **cache_slot, zval *rv)
 {
 	vrzno_object *vrzno = vrzno_fetch_object(object);
-	      long targetId = vrzno->targetId;
-	         char *name = ZSTR_VAL(member);
-
-	// EM_ASM({ console.log('READ1', $0, $1, $2); }, targetId, object, vrzno);
+	long targetId = vrzno->targetId;
+	char *name = ZSTR_VAL(member);
 
 	char *scalar_result = EM_ASM_INT({
 
 		const target = Module.targets.get($0);
-
 		const property = UTF8ToString($1);
-		const result = target[property];
 
-		// console.log('READ1', {aa: $0, target, property, result});
+		if(!(property in target))
+		{
+			const jsRet    = 'UN';
+			const len      = lengthBytesUTF8(jsRet) + 1;
+			const strLoc   = _malloc(len);
+
+			stringToUTF8(jsRet, strLoc, len);
+
+			return strLoc;
+		}
+
+		if(target[property] === null)
+		{
+			const jsRet    = 'NU';
+			const len      = lengthBytesUTF8(jsRet) + 1;
+			const strLoc   = _malloc(len);
+
+			stringToUTF8(jsRet, strLoc, len);
+
+			return strLoc;
+		}
+
+		const result = target[property];
 
 		if(!result || !['function','object'].includes(typeof result))
 		{
@@ -99,7 +117,19 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 
 	}, targetId, name, type);
 
-	if(strlen(scalar_result) > 1 && *scalar_result == 'O')
+	if(strlen(scalar_result) > 1 && *scalar_result == 'U')
+	{
+		ZVAL_UNDEF(rv);
+		free(scalar_result);
+		return rv;
+	}
+	else if(strlen(scalar_result) > 1 && *scalar_result == 'N')
+	{
+		ZVAL_NULL(rv);
+		free(scalar_result);
+		return rv;
+	}
+	else if(strlen(scalar_result) > 1 && scalar_result[0] == 'O')
 	{
 		ZVAL_STRING(rv, scalar_result + 2);
 		free(scalar_result);
@@ -115,8 +145,6 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 		const result   = target[property];
 		const zvalPtr  = $2;
 
-		// console.log('READING', {aa: $0, target, property, result});
-
 		if(result && ['function','object'].includes(typeof result))
 		{
 			let index = Module.targets.getId(result);
@@ -124,18 +152,8 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 			if(!Module.targets.has(result))
 			{
 				index = Module.targets.add(result);
-
-				result[Module.hasZval] = zvalPtr;
-
-				if(Module.targets.hasId(index))
-				{
-					// Module.fRegistry.unregister(Module.targets.get(index));
-				}
-
-				// Module.fRegistry.register(result, zvalPtr, result);
+				Module.zvalMap.set(result, zvalPtr);
 			}
-
-			// console.log({index, result});
 
 			return index;
 		}
@@ -155,9 +173,8 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 
 	vrzno_object *retVrzno = vrzno_create_object_for_target(obj_result, isFunction);
 
-	// EM_ASM({ console.log('READ2', $0, $1, $2) }, obj_result, retVrzno, targetId);
-
 	ZVAL_OBJ(rv, &retVrzno->zo);
+
 	return rv;
 }
 
@@ -288,19 +305,49 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 	return newValue;
 }
 
-static zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, zval *rv)
+zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, zval *rv)
 {
 	vrzno_object *vrzno = vrzno_fetch_object(object);
-	      long targetId = vrzno->targetId;
-	         long index = Z_LVAL_P(offset);
-
-	// EM_ASM({ console.log('READD1', $0) }, targetId);
+	long targetId = vrzno->targetId;
+	long index = Z_LVAL_P(offset);
 
 	char *scalar_result = EM_ASM_INT({
 
-		const target = Module.targets.get($0);
-
+		let target = Module.targets.get($0);
 		const property = $1;
+
+		if(target instanceof ArrayBuffer)
+		{
+			if(!Module.bufferMaps.has(target))
+			{
+				Module.bufferMaps.set(target, new Uint8Array(target));
+			}
+
+			target = Module.bufferMaps.get(target);
+		}
+
+		if(!(property in target))
+		{
+			const jsRet    = 'UN';
+			const len      = lengthBytesUTF8(jsRet) + 1;
+			const strLoc   = _malloc(len);
+
+			stringToUTF8(jsRet, strLoc, len);
+
+			return strLoc;
+		}
+
+		if(target[property] === null)
+		{
+			const jsRet    = 'NU';
+			const len      = lengthBytesUTF8(jsRet) + 1;
+			const strLoc   = _malloc(len);
+
+			stringToUTF8(jsRet, strLoc, len);
+
+			return strLoc;
+		}
+
 		const result = target[property];
 
 		if(!result || !['function','object'].includes(typeof result))
@@ -331,6 +378,25 @@ static zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, z
 		return rv;
 	}
 
+	if(strlen(scalar_result) > 1 && *scalar_result == 'U')
+	{
+		ZVAL_UNDEF(rv);
+		free(scalar_result);
+		return rv;
+	}
+	else if(strlen(scalar_result) > 1 && *scalar_result == 'N')
+	{
+		ZVAL_NULL(rv);
+		free(scalar_result);
+		return rv;
+	}
+	else if(strlen(scalar_result) > 1 && scalar_result[0] == 'O')
+	{
+		ZVAL_STRING(rv, scalar_result + 2);
+		free(scalar_result);
+		return rv;
+	}
+
 	free(scalar_result);
 
 	int obj_result = EM_ASM_INT({
@@ -340,8 +406,6 @@ static zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, z
 		const result   = target[property];
 		const zvalPtr  = $2;
 
-		// console.log('READING', {aa: $0, target, property, result});
-
 		if(result && ['function','object'].includes(typeof result))
 		{
 			let index = Module.targets.getId(result);
@@ -349,18 +413,8 @@ static zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, z
 			if(!Module.targets.has(result))
 			{
 				index = Module.targets.add(result);
-
-				result[Module.hasZval] = zvalPtr;
-
-				if(Module.targets.hasId(index))
-				{
-					// Module.fRegistry.unregister(Module.targets.get(index));
-				}
-
-				// Module.fRegistry.register(result, zvalPtr, result);
+				Module.zvalMap.set(result, zvalPtr);
 			}
-
-			// console.log({index, result});
 
 			return index;
 		}
@@ -380,13 +434,11 @@ static zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, z
 
 	vrzno_object *retVrzno = vrzno_create_object_for_target(obj_result, isFunction);
 
-	// EM_ASM({ console.log('READD2', $0, $1, $2) }, obj_result, retVrzno, targetId);
-
 	ZVAL_OBJ(rv, &retVrzno->zo);
 	return rv;
 }
 
-static void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
+void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 {
 	vrzno_object *vrzno = vrzno_fetch_object(object);
 	      long targetId = vrzno->targetId;
@@ -511,11 +563,11 @@ static void vrzno_write_dimension(zend_object *object, zval *offset, zval *newVa
 	}
 }
 
-static int vrzno_has_dimension(zend_object *object, zval *offset, int check_empty)
+int vrzno_has_dimension(zend_object *object, zval *offset, int check_empty)
 {
-	         long index = Z_LVAL_P(offset);
+	long index = Z_LVAL_P(offset);
 	vrzno_object *vrzno = vrzno_fetch_object(object);
-	      long targetId = vrzno->targetId;
+	long targetId = vrzno->targetId;
 
 	// EM_ASM({ console.log('HASD', $0) }, targetId);
 
@@ -525,9 +577,27 @@ static int vrzno_has_dimension(zend_object *object, zval *offset, int check_empt
 		const property    = $1;
 		const check_empty = $2;
 
+		if(Array.isArray(target))
+		{
+			return typeof target[property] !== 'undefined';
+		}
+
+		if(target instanceof ArrayBuffer)
+		{
+			if(!Module.bufferMaps.has(target))
+			{
+				Module.bufferMaps.set(target, new Uint8Array(target));
+			}
+
+			const targetBytes = Module.bufferMaps.get(target);
+
+			return targetBytes[property] !== 'undefined';
+		}
+
 		if(!check_empty)
 		{
-			return property in target
+
+			return property in target;
 		}
 		else
 		{
@@ -569,7 +639,7 @@ void vrzno_unset_dimension(zend_object *object, zval *offset)
 	})() }, targetId, index);
 }
 
-static HashTable *vrzno_get_properties_for(zend_object *object, zend_prop_purpose purpose)
+HashTable *vrzno_get_properties_for(zend_object *object, zend_prop_purpose purpose)
 {
 	vrzno_object *vrzno = vrzno_fetch_object(object);
 	long targetId = vrzno->targetId;
@@ -579,18 +649,19 @@ static HashTable *vrzno_get_properties_for(zend_object *object, zend_prop_purpos
 	char *js_ret = EM_ASM_INT({
 
 		const target = Module.targets.get($0);
+		let json;
 
 		if(typeof target === 'function')
 		{
-			json = JSON.stringify({__targetId:$0});
+			json = JSON.stringify({});
 		}
 		else
 		{
-			try{ json = JSON.stringify({__targetId:$0, ...target}); }
-			catch { json = JSON.stringify({__targetId:$0}); }
+			try{ json = JSON.stringify({...target}); }
+			catch { json = JSON.stringify({}); }
 		}
 
-		// console.log('SCANNING', {aa: $0, target});
+		// console.log('SCANNING', {aa: $0, target, json});
 
 		const jsRet  = String(json);
 		const len    = lengthBytesUTF8(jsRet) + 1;
@@ -633,7 +704,7 @@ int vrzno_has_property(zend_object *object, zend_string *member, int has_set_exi
 	}, targetId, name);
 }
 
-static zend_string *vrzno_get_class_name(zend_object *object)
+zend_string *vrzno_get_class_name(zend_object *object)
 {
 	vrzno_object *vrzno = vrzno_fetch_object(object);
 	         long targetId = vrzno->targetId;

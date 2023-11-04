@@ -17,9 +17,18 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_refcount(zval *zv)
 	return Z_REFCOUNT_P(zv);
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(long address)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(zval *zv, bool isZval)
 {
-	efree(address);
+	// printf("EXP_EFREE: %u\n", zv);
+	if(isZval)
+	{
+		// php_debug_zval_dump(zv, 8);
+		Z_DELREF_P(zv);
+		// php_debug_zval_dump(zv, 8);
+		// EM_ASM({ console.log('EXP_EFREE ', $0, $1); }, zv,  Z_REFCOUNT_P(zv));
+	}
+
+	efree(zv);
 }
 
 
@@ -140,10 +149,11 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
 	php_json_encode_init(&encoder);
 	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
 	php_json_encode_zval(&buf, &keys, 0, &encoder);
-
-	char *json = ZSTR_VAL(buf.s);
-
 	smart_str_0(&buf);
+
+	char *json = malloc(ZSTR_LEN(buf.s));
+
+	json = ZSTR_VAL(buf.s);
 
 	return json;
 }

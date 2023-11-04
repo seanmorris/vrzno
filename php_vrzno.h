@@ -19,6 +19,8 @@ PHP_FUNCTION(vrzno_eval);
 PHP_FUNCTION(vrzno_run);
 PHP_FUNCTION(vrzno_timeout);
 PHP_FUNCTION(vrzno_new);
+PHP_FUNCTION(vrzno_await);
+PHP_FUNCTION(vrzno_env);
 PHP_FUNCTION(vrzno_import);
 
 PHP_METHOD(Vrzno, addeventlistener);

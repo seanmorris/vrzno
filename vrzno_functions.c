@@ -14,6 +14,14 @@ ZEND_BEGIN_ARG_INFO(arginfo_vrzno_new, 0)
 	ZEND_ARG_INFO(0, vrzno_class)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO(arginfo_vrzno_await, 0)
+	ZEND_ARG_INFO(0, vrzno_class)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_vrzno_env, 0)
+	ZEND_ARG_INFO(0, str)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_INFO(arginfo_vrzno_import, 0)
 	ZEND_ARG_INFO(0, vrzno_class)
 ZEND_END_ARG_INFO()
@@ -23,6 +31,8 @@ static const zend_function_entry vrzno_functions[] = {
 	PHP_FE(vrzno_run,     arginfo_vrzno_run)
 	PHP_FE(vrzno_timeout, arginfo_vrzno_timeout)
 	PHP_FE(vrzno_new,     arginfo_vrzno_new)
+	PHP_FE(vrzno_await,   arginfo_vrzno_await)
+	PHP_FE(vrzno_env,     arginfo_vrzno_env)
 	PHP_FE(vrzno_import,  arginfo_vrzno_import)
 	PHP_FE_END
 };
@@ -145,6 +155,45 @@ PHP_FUNCTION(vrzno_timeout)
 	GC_ADDREF(ZEND_CLOSURE_OBJECT(fcc.function_handler));
 }
 
+EM_ASYNC_JS(zval*, vrzno_await_internal, (long targetId), {
+	const target = Module.targets.get(targetId);
+	const result = await target;
+	return Module.jsToZval(result);
+});
+
+PHP_FUNCTION(vrzno_await)
+{
+	zval *zv;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(zv, vrzno_class_entry)
+	ZEND_PARSE_PARAMETERS_END();
+
+	long targetId = vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
+
+	zval *js_ret = vrzno_await_internal(targetId);
+
+	ZVAL_NULL(return_value);
+	ZVAL_COPY(return_value, js_ret);
+}
+
+PHP_FUNCTION(vrzno_env)
+{
+	char   *name = "";
+	size_t  name_len = sizeof(name) - 1;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STRING(name, name_len)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zval *js_ret = EM_ASM_PTR({
+		return Module.jsToZval(Module[UTF8ToString($0)]);
+	}, name);
+
+	ZVAL_NULL(return_value);
+	ZVAL_COPY(return_value, js_ret);
+}
+
 PHP_FUNCTION(vrzno_new)
 {
 	zval *zv;
@@ -169,9 +218,7 @@ PHP_FUNCTION(vrzno_new)
         ZVAL_COPY(&zvalPtrs[i], &argv[i]);
 	}
 
-	zval *js_ret;
-
-	js_ret = EM_ASM_PTR({
+	zval *js_ret = EM_ASM_PTR({
 		const _class = Module.targets.get($0);
 		const argv   = $1;
 		const argc   = $2;
@@ -209,6 +256,6 @@ PHP_FUNCTION(vrzno_import)
 
 	}, name);
 
-	ZVAL_UNDEF(return_value);
+	ZVAL_NULL(return_value);
 	ZVAL_COPY(return_value, js_ret);
 }
