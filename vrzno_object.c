@@ -1,12 +1,6 @@
 zend_class_entry *vrzno_class_entry;
 zend_object_handlers vrzno_object_handlers;
 
-typedef struct {
-	bool isFunction;
-	long targetId;
-	zend_object zo;
-} vrzno_object;
-
 static inline vrzno_object *vrzno_fetch_object(zend_object *obj) {
 	return (vrzno_object*)((char*)(obj) - XtOffsetOf(vrzno_object, zo));
 }

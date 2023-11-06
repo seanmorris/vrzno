@@ -9,6 +9,7 @@
 #include "ext/standard/info.h"
 #include "ext/standard/php_var.h"
 #include "php_vrzno.h"
+#include "../pdo/php_pdo_driver.h"
 #include "../json/php_json.h"
 #include "../json/php_json_encoder.h"
 #include "../json/php_json_parser.h"
@@ -30,6 +31,8 @@
 #include "vrzno_array.c"
 #include "vrzno_expose.c"
 #include "vrzno_functions.c"
+#include "vrzno_db_statement.c"
+#include "vrzno_db.c"
 
 PHP_RINIT_FUNCTION(vrzno)
 {
@@ -841,13 +844,32 @@ PHP_MINIT_FUNCTION(vrzno)
 		Module.callables = Module.callables || new Module.WeakerMap();
 
 		Module.targets = Module.targets || new Module.UniqueIndex;
+
+		Module.PdoParams = new WeakMap;
+
+		Module.PdoD1Driver = Module.PdoD1Driver || (class PdoD1Driver
+		{
+			prepare(db, query)
+			{
+				console.log('prepare', {db, query});
+
+				return db.prepare(query);
+			}
+
+			doer(db, query)
+			{
+				console.log('doer', {db, query});
+			}
+		});
+
+		Module.pdoDriver = Module.pdoDriver || new Module.PdoD1Driver;
 	});
 
 #if defined(ZTS) && defined(COMPILE_DL_VRZNO)
 	ZEND_TSRMLS_CACHE_UPDATE();
 #endif
 
-	return SUCCESS;
+	return php_pdo_register_driver(&pdo_vrzno_driver);
 }
 
 PHP_MINFO_FUNCTION(vrzno)

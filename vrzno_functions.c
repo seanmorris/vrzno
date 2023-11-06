@@ -26,6 +26,10 @@ ZEND_BEGIN_ARG_INFO(arginfo_vrzno_import, 0)
 	ZEND_ARG_INFO(0, vrzno_class)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO(arginfo_vrzno_target, 0)
+	ZEND_ARG_INFO(0, vrzno_class)
+ZEND_END_ARG_INFO()
+
 static const zend_function_entry vrzno_functions[] = {
 	PHP_FE(vrzno_eval,    arginfo_vrzno_eval)
 	PHP_FE(vrzno_run,     arginfo_vrzno_run)
@@ -34,6 +38,7 @@ static const zend_function_entry vrzno_functions[] = {
 	PHP_FE(vrzno_await,   arginfo_vrzno_await)
 	PHP_FE(vrzno_env,     arginfo_vrzno_env)
 	PHP_FE(vrzno_import,  arginfo_vrzno_import)
+	PHP_FE(vrzno_target,  arginfo_vrzno_target)
 	PHP_FE_END
 };
 
@@ -235,9 +240,10 @@ PHP_FUNCTION(vrzno_new)
 		return Module.jsToZval(_object);
 	}, targetId, zvalPtrs, argc, size);
 
-	ZVAL_UNDEF(return_value);
+	ZVAL_NULL(return_value);
 	ZVAL_COPY(return_value, js_ret);
 }
+
 
 PHP_FUNCTION(vrzno_import)
 {
@@ -258,4 +264,17 @@ PHP_FUNCTION(vrzno_import)
 
 	ZVAL_NULL(return_value);
 	ZVAL_COPY(return_value, js_ret);
+}
+
+PHP_FUNCTION(vrzno_target)
+{
+	zval *zv;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(zv, vrzno_class_entry)
+	ZEND_PARSE_PARAMETERS_END();
+
+	long targetId = vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
+
+	ZVAL_LONG(return_value, targetId);
 }
