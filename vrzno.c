@@ -66,7 +66,7 @@ PHP_MINIT_FUNCTION(vrzno)
 	vrzno_object_handlers.write_dimension    = vrzno_write_dimension;
 	vrzno_object_handlers.has_dimension      = vrzno_has_dimension;
 	vrzno_object_handlers.unset_dimension    = vrzno_unset_dimension;
-	vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
+	// vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
 
 	EM_ASM({
 		Module.zvalMap = new WeakMap;
@@ -582,7 +582,6 @@ PHP_MINIT_FUNCTION(vrzno)
 
 			if(value && ['function','object'].includes(typeof value))
 			{
-				// if(value[ Module.hasZval ])
 				if(Module.zvalMap.has(value))
 				{
 					return Module.zvalMap.get(value);
@@ -646,8 +645,8 @@ PHP_MINIT_FUNCTION(vrzno)
 				zvalPtr = Module.ccall(
 					'vrzno_expose_create_object_for_target'
 					, 'number'
-					, ['number', 'number']
-					, [index, typeof value === 'function']
+					, ['number', 'number', 'number']
+					, [index, typeof value === 'function', !!((value).prototype && (value).prototype.constructor)]
 				);
 
 				// value[ Module.hasZval ] = zvalPtr;
@@ -841,9 +840,13 @@ PHP_MINIT_FUNCTION(vrzno)
 			}
 		});
 
+		Module.classes = Module.classes || new WeakMap();
+		Module._classes = Module._classes || new Module.WeakerMap();
 		Module.callables = Module.callables || new Module.WeakerMap();
 
 		Module.targets = Module.targets || new Module.UniqueIndex;
+
+		Module.targets.add(globalThis);
 
 		Module.PdoParams = new WeakMap;
 
@@ -927,9 +930,6 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 			params[i] = *argv[i];
 		}
 	}
-
-	// EM_ASM({ console.log('exec', $0, $1, $2) }, fptr, argv, argc);
-
 
 	if(zend_call_function(&fci, &fcc) == SUCCESS)
 	{

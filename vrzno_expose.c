@@ -19,15 +19,13 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_refcount(zval *zv)
 
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(zval *zv, bool isZval)
 {
-	// printf("EXP_EFREE: %u\n", zv);
 	if(isZval)
 	{
-		// php_debug_zval_dump(zv, 8);
+		// printf("EXP_DELREF: %u\n", (int) zv);
 		Z_DELREF_P(zv);
-		// php_debug_zval_dump(zv, 8);
-		// EM_ASM({ console.log('EXP_EFREE ', $0, $1); }, zv,  Z_REFCOUNT_P(zv));
 	}
 
+	// printf("EXP_EFREE: %u\n", (int) zv);
 	efree(zv);
 }
 
@@ -83,10 +81,10 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction, int isConstructor)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-	vrzno_object *vObj = vrzno_create_object_for_target(target_id, (bool) isFunction);
+	vrzno_object *vObj = vrzno_create_object_for_target(target_id, (bool) isFunction, (bool) isConstructor);
 	ZVAL_OBJ(zv, &vObj->zo);
 	return zv;
 }
@@ -111,7 +109,10 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_is_target(zval* zv)
 
 	if(Z_OBJCE_P(zv) != vrzno_class_entry)
 	{
-		return 0;
+		if(Z_OBJCE_P(zv)->parent != vrzno_class_entry)
+		{
+			return 0;
+		}
 	}
 
 	return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
@@ -174,6 +175,11 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
 	char *errstr = NULL;
 
 	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv) == vrzno_class_entry)
+	{
+		return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
+	}
+
+	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv)->parent == vrzno_class_entry)
 	{
 		return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
 	}
