@@ -7,6 +7,8 @@ VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense.
 * VRZNO is a statically compiled PHP module.
 * VRZNO runs in-browser.
 
+## Contents
+
 * [PDO D1 SQL Connector (Cloudflare)](#pdo-d1-sql-connector-cloudflare)
 * [PHP API](#php-api)
 
