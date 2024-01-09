@@ -93,6 +93,11 @@ Takes a string, and returns an object passed into the PHP Object's constructor.
 For example, if you invoke `PhpNode` like this in JavaScript:
 
 ```javascript
+import { PhpNode } from './PhpNode.mjs';
+import gi from 'node-gtk';
+const Gtk = gi.require('Gtk', '3.0');
+const WebKit2 = gi.require('WebKit2');
+
 const php = new PhpNode({Gtk, gi, WebKit2});
 ```
 
