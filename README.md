@@ -5,10 +5,20 @@
 VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense.
 
 * VRZNO lets you call javascript code from PHP.
-
 * VRZNO is a statically compiled PHP module.
-
 * VRZNO runs in-browser.
+
+## How is this possible?
+
+VRZNO is the first PHP extension built for php-wasm. Once its compiled with PHP, it can be served to any browser and executed client side.
+
+This changes all that.
+
+VRZNO allows you to control the page directly from PHP.
+
+https://github.com/seanmorris/php-wasm
+
+![](https://github.com/seanmorris/vrzno/blob/master/banner.jpg?raw=true)
 
 ## API
 
@@ -81,14 +91,4 @@ Get the `targetId` as an integer from a `Vrzno` object.
 
 Wait on a Promise-like object to resolve within PHP before proceeding with the script. This will pause execution of PHP in the same way the `await` keyword will when used in JavaScript.
 
-## How is this possible?
 
-VRZNO is the first PHP extension built for php-wasm. Once its compiled with PHP, it can be served to any browser and executed client side.
-
-This changes all that.
-
-VRZNO allows you to control the page directly from PHP.
-
-https://github.com/seanmorris/php-wasm
-
-![](https://github.com/seanmorris/vrzno/blob/master/banner.jpg?raw=true)
