@@ -13,11 +13,7 @@ VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense.
 * [PHP API](#php-api)
 
 ## How is this possible?
-VRZNO is the first PHP extension built for php-wasm. Once its compiled with PHP, it can be served to any browser and executed client side.
-
-This changes all that.
-
-VRZNO allows you to control the page directly from PHP.
+VRZNO is the first PHP extension built for php-wasm. Once its compiled with PHP, it can be served to any browser and executed client side. It can also run in NodeJS and CloudFlare workers.
 
 https://github.com/seanmorris/php-wasm
 
