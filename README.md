@@ -5,7 +5,7 @@ VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense.
 
 * VRZNO lets you call javascript code from PHP.
 * VRZNO is a statically compiled PHP module.
-* VRZNO runs in-browser.
+* VRZNO runs in-browser, nodeJS and cloudflare.
 
 ## Contents
 
