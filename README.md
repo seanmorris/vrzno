@@ -83,10 +83,12 @@ Wait on a Promise-like object to resolve within PHP before proceeding with the s
 
 ## How is this possible?
 
-VRZNO is the first PHP extension built for PIB/php-wasm. Once its compiled with PHP to WASM, it can be served to any browser and executed client side.
-
-The PIB/php-wasm packages allow you to call PHP from javascript, the only way to communicate from PHP back to JS was to print output.
+VRZNO is the first PHP extension built for php-wasm. Once its compiled with PHP, it can be served to any browser and executed client side.
 
 This changes all that.
 
 VRZNO allows you to control the page directly from PHP.
+
+https://github.com/seanmorris/php-wasm
+
+![](https://github.com/seanmorris/vrzno/blob/master/banner.jpg?raw=true)
