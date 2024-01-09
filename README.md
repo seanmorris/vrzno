@@ -1,5 +1,5 @@
 # What is VRZNO?
-(/vərəˈzɑːnoʊ/ | vər-ə-ZAH-noh | vehr uh zahn oh )
+(/vərəˈzɑːnoʊ/ | vər-ə-ZAH-noh )
 
 VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense.
 
