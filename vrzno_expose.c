@@ -1,34 +1,45 @@
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_refcount(zval *zv)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_zrefcount(zval *zv)
 {
-	// EM_ASM({ console.log('INC ', $0, $1); }, zv, Z_REFCOUNT_P(zv));
+	// EM_ASM({ console.log('zINC', $0, $1); }, zv, Z_REFCOUNT_P(zv));
 	Z_ADDREF_P(zv);
 	return NULL;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_refcount(zval *zv)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_zrefcount(zval *zv)
 {
-	// EM_ASM({ console.log('DEC ', $0, $1); }, zv, Z_REFCOUNT_P(zv));
+	// EM_ASM({ console.log('zDEC', $0, $1); }, zv, Z_REFCOUNT_P(zv));
 	Z_DELREF_P(zv);
 	return NULL;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_refcount(zval *zv)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_zrefcount(zval *zv)
 {
 	return Z_REFCOUNT_P(zv);
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(zval *zv, bool isZval)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_crefcount(zend_function *fptr)
 {
-	if(isZval)
-	{
-		// printf("EXP_DELREF: %u\n", (int) zv);
-		Z_DELREF_P(zv);
-	}
-
-	// printf("EXP_EFREE: %u\n", (int) zv);
-	efree(zv);
+	// EM_ASM({ console.log('cINC', $0, $1); }, fptr, GC_REFCOUNT(ZEND_CLOSURE_OBJECT(fptr)));
+	GC_ADDREF(ZEND_CLOSURE_OBJECT(fptr));
+	return NULL;
 }
 
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_crefcount(zend_function *fptr)
+{
+	// EM_ASM({ console.log('cDEC', $0, $1); }, fptr, GC_REFCOUNT(ZEND_CLOSURE_OBJECT(fptr)));
+	GC_DELREF(ZEND_CLOSURE_OBJECT(fptr));
+	return NULL;
+}
+
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_crefcount(zend_function *fptr)
+{
+	return GC_REFCOUNT(ZEND_CLOSURE_OBJECT(fptr));
+}
+
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(void *addr)
+{
+	efree(addr);
+}
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
 {
@@ -84,7 +95,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction, int isConstructor)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-	vrzno_object *vObj = vrzno_create_object_for_target(target_id, (bool) isFunction, (bool) isConstructor);
+	vrzno_object *vObj = vrzno_create_object_for_target(target_id, isFunction, isConstructor);
 	ZVAL_OBJ(zv, &vObj->zo);
 	return zv;
 }

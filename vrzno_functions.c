@@ -178,8 +178,12 @@ PHP_FUNCTION(vrzno_await)
 
 	zval *js_ret = vrzno_await_internal(targetId);
 
-	ZVAL_NULL(return_value);
-	ZVAL_COPY(return_value, js_ret);
+	if(!js_ret)
+	{
+		return;
+	}
+
+	RETURN_ZVAL(js_ret, 1, 1);
 }
 
 PHP_FUNCTION(vrzno_env)
@@ -195,8 +199,12 @@ PHP_FUNCTION(vrzno_env)
 		return Module.jsToZval(Module[UTF8ToString($0)]);
 	}, name);
 
-	ZVAL_NULL(return_value);
-	ZVAL_COPY(return_value, js_ret);
+	if(!js_ret)
+	{
+		return;
+	}
+
+	RETURN_ZVAL(js_ret, 1, 1);
 }
 
 PHP_FUNCTION(vrzno_new)
@@ -214,15 +222,6 @@ PHP_FUNCTION(vrzno_new)
 
 	int size = sizeof(zval);
 
-	zval *zvalPtrs = (zval*) emalloc(argc * sizeof(zval));
-	int i = 0;
-
-	for(i = 0; i < argc; i++)
-	{
-		ZVAL_NULL(&zvalPtrs[i]);
-        ZVAL_COPY(&zvalPtrs[i], &argv[i]);
-	}
-
 	zval *js_ret = EM_ASM_PTR({
 		const _class = Module.targets.get($0);
 		const argv   = $1;
@@ -235,19 +234,20 @@ PHP_FUNCTION(vrzno_new)
 			args.push(Module.zvalToJS(argv + i * size));
 		}
 
-		const _object = new _class(...args);
+		return Module.jsToZval(new _class(...args));
 
-		return Module.jsToZval(_object);
-	}, targetId, zvalPtrs, argc, size);
+	}, targetId, argv, argc, size);
 
-	ZVAL_NULL(return_value);
-	ZVAL_COPY(return_value, js_ret);
+	if(!js_ret)
+	{
+		return;
+	}
+
+	RETURN_ZVAL(js_ret, 1, 1);
 }
-
 
 PHP_FUNCTION(vrzno_import)
 {
-	zval *js_ret;
 	char *name;
 	size_t name_len = sizeof(name) - 1;
 
@@ -255,15 +255,19 @@ PHP_FUNCTION(vrzno_import)
 		Z_PARAM_STRING(name, name_len)
 	ZEND_PARSE_PARAMETERS_END();
 
-	js_ret = EM_ASM_PTR({
+	zval *js_ret = EM_ASM_PTR({
 		const name = UTF8ToString($0);
 
 		return Module.jsToZval(import(name));
 
 	}, name);
 
-	ZVAL_NULL(return_value);
-	ZVAL_COPY(return_value, js_ret);
+	if(!js_ret)
+	{
+		return;
+	}
+
+	RETURN_ZVAL(js_ret, 1, 1);
 }
 
 PHP_FUNCTION(vrzno_target)
