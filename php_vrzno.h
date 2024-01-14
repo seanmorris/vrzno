@@ -12,13 +12,11 @@ extern zend_module_entry vrzno_module_entry;
 ZEND_TSRMLS_CACHE_EXTERN()
 # endif
 
-extern PHPAPI int vrzno_exec_callback(zend_function *fptr, zval **argv, int argc);
-extern PHPAPI int vrzno_del_callback(zend_function *fptr);
-
 typedef struct {
-	bool isFunction;
-	long targetId;
 	zend_object zo;
+	long isFunction;
+	bool isConstructor;
+	long targetId;
 } vrzno_object;
 
 typedef struct {
@@ -57,5 +55,8 @@ PHP_METHOD(Vrzno, __invoke);
 PHP_METHOD(Vrzno, __call);
 PHP_METHOD(Vrzno, __get);
 // PHP_METHOD(Vrzno, __set);
+PHP_METHOD(Vrzno, __construct);
 
-#endif	/* PHP_VRZNO_H */
+#endif
+
+static zend_object_iterator *vrzno_array_get_iterator(zend_class_entry *ce, zval *zv, int by_ref);
