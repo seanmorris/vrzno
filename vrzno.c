@@ -130,18 +130,8 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 		}
 	}
 
-	// EM_ASM({ console.log('exec', $0, $1, $2) }, fptr, argv, argc);
-
-
 	if(zend_call_function(&fci, &fcc) == SUCCESS)
 	{
-		// zval *retZval = (zval*) emalloc(sizeof(zval));
-
-		// ZVAL_UNDEF(retZval);
-		// ZVAL_COPY_VALUE(retZval, &retval);
-
-		// return retZval;
-
 		return fci.retval;
 	}
 

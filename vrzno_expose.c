@@ -1,25 +1,16 @@
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_zrefcount(zval *zv)
 {
-	// EM_ASM({ console.log('zINC', $0); }, zv);
-	// EM_ASM({ console.log('zINC', $0, $1); }, zv, Z_REFCOUNT_P(zv));
-
 	Z_ADDREF_P(zv);
-
 	return NULL;
 }
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_zrefcount(zval *zv)
 {
 	int count = Z_REFCOUNT_P(zv);
-
-	// EM_ASM({ console.log('zDEC', $0); }, zv);
-	// EM_ASM({ console.log('zDEC', $0, $1); }, zv, count);
-
 	if(!count)
 	{
 		return NULL;
 	}
-
 	Z_DELREF_P(zv);
 	return NULL;
 }
@@ -31,23 +22,17 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_zrefcount(zval *zv)
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_crefcount(zend_function *fptr)
 {
-	// EM_ASM({ console.log('cINC', $0, $1); }, fptr, GC_REFCOUNT(ZEND_CLOSURE_OBJECT(fptr)));
-
 	GC_ADDREF(ZEND_CLOSURE_OBJECT(fptr));
-
 	return NULL;
 }
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_crefcount(zend_function *fptr)
 {
 	int count = GC_REFCOUNT(ZEND_CLOSURE_OBJECT(fptr));
-
 	if(!count)
 	{
 		return NULL;
 	}
-
-	// EM_ASM({ console.log('cDEC', $0, $1); }, fptr, count);
 
 	GC_DELREF(ZEND_CLOSURE_OBJECT(fptr));
 
@@ -102,10 +87,10 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_long(long value)
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double* value)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-	ZVAL_DOUBLE(zv, *value);
+	ZVAL_DOUBLE(zv, value);
 	return zv;
 }
 
@@ -247,9 +232,6 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_string(zval *zv)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_type(zval *object, char *name)
 {
 	zval *rv = NULL;
-
-	// EM_ASM({ console.log('TYPE_CHECK', $0, $1, $2, $3, $4, $5, $6); }, object, Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 
 	// if (data == &EG(uninitialized_zval)) {
@@ -264,9 +246,6 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_type(zval *object, char *name)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_callable(zval *object, char *name)
 {
 	zval *rv = NULL;
-
-	// EM_ASM({ console.log('CALL_CHECK', $0, $1, $2, $3, $4, $5, $6); }, object, Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 
 	// if (data == &EG(uninitialized_zval)) {

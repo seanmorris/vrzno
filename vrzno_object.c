@@ -133,7 +133,7 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 	long targetId = vrzno->targetId;
 	char *name = ZSTR_VAL(member);
 
-	int scalar_result = EM_ASM_INT({
+	zval *scalar_result = EM_ASM_PTR({
 		const target = Module.targets.get($0);
 		const property = UTF8ToString($1);
 
@@ -156,7 +156,7 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 
 		return 0;
 
-	}, targetId, name, type);
+	}, targetId, name);
 
 	if(scalar_result)
 	{
@@ -164,8 +164,7 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 		return rv;
 	}
 
-	int obj_result = EM_ASM_INT({
-
+	int obj_index = EM_ASM_PTR({
 		const target   = Module.targets.get($0);
 		const property = UTF8ToString($1);
 		const result   = target[property];
@@ -188,23 +187,23 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 
 	}, targetId, name, rv);
 
-	if(!obj_result)
+	if(!obj_index)
 	{
-		ZVAL_BOOL(rv, obj_result);
+		ZVAL_BOOL(rv, obj_index);
 		return rv;
 	}
 
-	int isFunction = EM_ASM_INT({ return 'function' === typeof (Module.targets.get($0)) ? $0 : 0; }, obj_result);
+	int isFunction = EM_ASM_INT({ return 'function' === typeof (Module.targets.get($0)) ? $0 : 0; }, obj_index);
 	int isConstructor = 0;
 
 	if(isFunction)
 	{
 		isConstructor = (bool) EM_ASM_INT({
 			return !!((Module.targets.get($0)).prototype && (Module.targets.get($0)).prototype.constructor);
-		}, obj_result);
+		}, obj_index);
 	}
 
-	vrzno_object *retVrzno = vrzno_create_object_for_target(obj_result, isFunction, isConstructor);
+	vrzno_object *retVrzno = vrzno_create_object_for_target(obj_index, isFunction, isConstructor);
 
 	ZVAL_OBJ(rv, &retVrzno->zo);
 	return rv;
@@ -796,6 +795,7 @@ PHP_METHOD(Vrzno, __call)
 	int size = sizeof(zval);
 
 	zval *zvalPtrs = NULL;
+	// zval zvalPtrs[js_argc];
 
 	if(js_argc)
 	{
@@ -820,8 +820,6 @@ PHP_METHOD(Vrzno, __call)
 
 		const args = [];
 
-		// console.log({argv, argc, size});
-
 		for(let i = 0; i < argc; i++)
 		{
 			args.push(Module.zvalToJS(argv + i * size));
@@ -835,11 +833,10 @@ PHP_METHOD(Vrzno, __call)
 
 	}, targetId, js_method_name, zvalPtrs, js_argc, size);
 
-	if(js_argc)
-	{
-		// EM_ASM({ console.log('CALL - FREE', $0) }, zvalPtrs);
-		// efree(zvalPtrs);
-	}
+	// if(js_argc)
+	// {
+	// 	efree(zvalPtrs);
+	// }
 
 	if(!js_ret)
 	{
