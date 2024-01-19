@@ -1,11 +1,11 @@
 Module.jsToZval = Module.jsToZval || (value => {
-	if(value && ['function','object'].includes(typeof value))
-	{
-		if(Module.zvalMap.has(value))
-		{
-			return Module.zvalMap.get(value);
-		}
-	}
+	// if(value && ['function','object'].includes(typeof value))
+	// {
+	// 	if(Module.zvalMap.has(value))
+	// 	{
+	// 		return Module.zvalMap.get(value);
+	// 	}
+	// }
 
 	let zvalPtr;
 
@@ -62,6 +62,7 @@ Module.jsToZval = Module.jsToZval || (value => {
 		);
 
 		Module.zvalMap.set(value, zvalPtr);
+		Module._zvalMap.set(zvalPtr, value);
 
 		if(!existed)
 		{

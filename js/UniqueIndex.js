@@ -4,9 +4,17 @@ Module.UniqueIndex = Module.UniqueIndex || (class UniqueIndex
 	{
 		this.byObject  = new WeakMap();
 		this.byInteger = new Module.WeakerMap();
-		this.tacked    = new Map();
+		// this.tacked    = new Map();
 
 		this.id = 0;
+
+		Object.defineProperty(this, 'clear', {
+			configurable: false
+			, writable:   false
+			, value: () => {
+				this.byInteger.clear();
+			}
+		});
 
 		Object.defineProperty(this, 'add', {
 			configurable: false
@@ -88,37 +96,37 @@ Module.UniqueIndex = Module.UniqueIndex || (class UniqueIndex
 			}
 		});
 
-		Object.defineProperty(this, 'tack', {
-			configurable: false
-			, writable:   false
-			, value:      (target) => {
-				if(!this.tacked.has(target))
-				{
-					this.tacked.set(target, 1);
-				}
-				else
-				{
-					this.tacked.set(target, 1 + this.tacked.get(target));
-				}
-			}
-		});
+		// Object.defineProperty(this, 'tack', {
+		// 	configurable: false
+		// 	, writable:   false
+		// 	, value:      (target) => {
+		// 		if(!this.tacked.has(target))
+		// 		{
+		// 			this.tacked.set(target, 1);
+		// 		}
+		// 		else
+		// 		{
+		// 			this.tacked.set(target, 1 + this.tacked.get(target));
+		// 		}
+		// 	}
+		// });
 
-		Object.defineProperty(this, 'untack', {
-			configurable: false
-			, writable:   false
-			, value:      (target) => {
-				if(!this.tacked.has(target))
-				{
-					return;
-				}
+		// Object.defineProperty(this, 'untack', {
+		// 	configurable: false
+		// 	, writable:   false
+		// 	, value:      (target) => {
+		// 		if(!this.tacked.has(target))
+		// 		{
+		// 			return;
+		// 		}
 
-				this.tacked.set(target, -1 + this.tacked.get(target));
+		// 		this.tacked.set(target, -1 + this.tacked.get(target));
 
-				if(this.tacked.get(target) <= 0)
-				{
-					return this.tacked.delete(target);
-				}
-			}
-		});
+		// 		if(this.tacked.get(target) <= 0)
+		// 		{
+		// 			return this.tacked.delete(target);
+		// 		}
+		// 	}
+		// });
 	}
 });

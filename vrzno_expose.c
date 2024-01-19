@@ -53,6 +53,7 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(void *addr)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
+	memset(zv, 0, sizeof(zval));
 
 	if(value)
 	{
@@ -69,6 +70,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_null(void)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
+	memset(zv, 0, sizeof(zval));
     ZVAL_NULL(zv);
 	return zv;
 }
@@ -76,6 +78,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_null(void)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_undef(void)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
+	memset(zv, 0, sizeof(zval));
     ZVAL_UNDEF(zv);
 	return zv;
 }
@@ -83,6 +86,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_undef(void)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_long(long value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
+	memset(zv, 0, sizeof(zval));
     ZVAL_LONG(zv, value);
 	return zv;
 }
@@ -90,6 +94,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_long(long value)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
+	memset(zv, 0, sizeof(zval));
 	ZVAL_DOUBLE(zv, value);
 	return zv;
 }
@@ -97,6 +102,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double value)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
+	memset(zv, 0, sizeof(zval));
 	ZVAL_STRING(zv, value);
 	return zv;
 }
@@ -104,6 +110,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction, int isConstructor)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
+	memset(zv, 0, sizeof(zval));
 	vrzno_object *vObj = vrzno_create_object_for_target(target_id, isFunction, isConstructor);
 	ZVAL_OBJ(zv, &vObj->zo);
 	return zv;
@@ -112,6 +119,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, in
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_params(int argc)
 {
 	zval *zvals = (zval*) emalloc(argc * sizeof(zval*));
+	memset(zvals, 0, argc * sizeof(zval*));
 	return zvals;
 }
 

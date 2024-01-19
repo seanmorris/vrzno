@@ -1,4 +1,10 @@
 Module.zvalToJS = Module.zvalToJS || (zvalPtr => {
+
+	if(Module._zvalMap.has(zvalPtr))
+	{
+		return Module._zvalMap.get(zvalPtr);
+	}
+
 	const IS_UNDEF  = 0;
 	const IS_NULL   = 1;
 	const IS_FALSE  = 2;
@@ -39,17 +45,17 @@ Module.zvalToJS = Module.zvalToJS || (zvalPtr => {
 		if(!Module.targets.has(wrapped))
 		{
 			Module.targets.add(wrapped);
-			Module.zvalMap.set(wrapped, zvalPtr);
-
 			Module.ccall(
 				'vrzno_expose_inc_zrefcount'
 				, 'number'
 				, ['number']
 				, [zvalPtr]
 			);
-
-			Module.fRegistry.register(wrapped, zvalPtr, wrapped);
 		}
+
+		Module.zvalMap.set(wrapped, zvalPtr);
+		Module._zvalMap.set(zvalPtr, wrapped);
+		Module.fRegistry.register(wrapped, zvalPtr, wrapped);
 
 		return wrapped;
 	}
