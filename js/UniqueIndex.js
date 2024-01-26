@@ -43,7 +43,9 @@ Module.UniqueIndex = Module.UniqueIndex || (class UniqueIndex
 			, value: (obj) => {
 				if(this.byObject.has(obj))
 				{
-					return this.byObject.get(obj);
+					const id = this.byObject.get(obj);
+
+					return this.byInteger.has(id);
 				}
 			}
 		});

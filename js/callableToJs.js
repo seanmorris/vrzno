@@ -39,18 +39,15 @@ Module.callableToJs = Module.callableToJs || ( (funcPtr) => {
 		if(args.length)
 		{
 			paramPtrs.forEach((p,i) => {
-				// console.log({p,i});
-				// if(!args[i] || !['function','object'].includes(typeof args[i]))
-				// {
-				// 	console.log({arg:args[i], p, i});
-				// 	Module.fRegistry.unregister(args[i]);
-				// }
-				// Module.ccall(
-				// 	'vrzno_expose_dec_zrefcount'
-				// 	, 'number'
-				// 	, ['number']
-				// 	, [p]
-				// );
+				if(!args[i] || !['function','object'].includes(typeof args[i]))
+				{
+					Module.ccall(
+						'vrzno_expose_efree'
+						, 'number'
+						, ['number']
+						, [p]
+					);
+				}
 			});
 
 			Module.ccall(
@@ -63,7 +60,19 @@ Module.callableToJs = Module.callableToJs || ( (funcPtr) => {
 
 		if(zvalPtr)
 		{
-			return Module.zvalToJS(zvalPtr);
+			const result = Module.zvalToJS(zvalPtr);
+
+			if(!result || !['function','object'].includes(typeof result))
+			{
+				Module.ccall(
+					'vrzno_expose_efree'
+					, 'number'
+					, ['number']
+					, [zvalPtr]
+				);
+			}
+
+			return result;
 		}
 	};
 

@@ -26,8 +26,9 @@ Module.pdoDriver = Module.pdoDriver || new Module.PdoD1Driver;
 
 Module.targets.add(globalThis);
 
+Module.onRefresh = Module.onRefresh || new Set;
+
 Module.onRefresh.add(() => {
-	console.log('VRZNO refresh callback');
 	Module.callables.clear();
 	Module.targets.clear();
 	Module._classes.clear();

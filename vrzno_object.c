@@ -776,36 +776,42 @@ zend_string *vrzno_get_class_name(zend_object *object)
 
 PHP_METHOD(Vrzno, __call)
 {
-	zval *object = getThis();
-	zend_object *zObject = object->value.obj;
+	zval *this = getThis();
+	zend_object *zObject = this->value.obj;
 	vrzno_object *vrzno = vrzno_fetch_object(zObject);
 	long targetId = vrzno->targetId;
 
-	char *js_method_name = "";
-	size_t js_method_name_len = 0;
+	char *method_name = "";
+	size_t method_name_len = 0;
 
-	HashTable *js_argv;
+	HashTable *argv;
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
-		Z_PARAM_STRING(js_method_name, js_method_name_len)
-		Z_PARAM_ARRAY_HT(js_argv)
+		Z_PARAM_STRING(method_name, method_name_len)
+		Z_PARAM_ARRAY_HT(argv)
 	ZEND_PARSE_PARAMETERS_END();
 
-	int js_argc = zend_hash_num_elements(js_argv);
+	int argc = zend_hash_num_elements(argv);
 	int size = sizeof(zval*);
+	int i = 0;
 
-	zval *zvalPtrs[js_argc];
+	zval *args[argc];
 
-	if(js_argc)
+	if(argc)
 	{
 		zval *data;
-		int i = 0;
 
-		ZEND_HASH_PACKED_FOREACH_VAL(js_argv, data) {
-			zvalPtrs[i] = (zval*) emalloc(js_argc * sizeof(zval));
-			memset(zvalPtrs[i], 0, sizeof(zval));
-			ZVAL_NULL(zvalPtrs[i]);
-			ZVAL_COPY_VALUE(zvalPtrs[i], data);
+		ZEND_HASH_PACKED_FOREACH_VAL(argv, data) {
+			if(Z_REFCOUNTED_P(data))
+			{
+				args[i] = (zval*) emalloc(argc * sizeof(zval));
+				ZVAL_UNDEF(args[i]);
+				ZVAL_COPY_VALUE(args[i], data);
+			}
+			else
+			{
+				args[i] = data;
+			}
 			i++;
 		} ZEND_HASH_FOREACH_END();
 	}
@@ -813,7 +819,7 @@ PHP_METHOD(Vrzno, __call)
 	zval *js_ret = EM_ASM_INT({
 		const target = Module.targets.get($0);
 		const method_name = UTF8ToString($1);
-		const argv = $2;
+		const argp = $2;
 		const argc = $3;
 		const size = $4;
 
@@ -821,7 +827,7 @@ PHP_METHOD(Vrzno, __call)
 
 		for(let i = 0; i < argc; i++)
 		{
-			const loc = argv + i * size;
+			const loc = argp + i * size;
 			const ptr = Module.getValue(loc, '*');
 			const arg = Module.zvalToJS(ptr);
 			args.push(arg);
@@ -832,7 +838,7 @@ PHP_METHOD(Vrzno, __call)
 
 		return retZval;
 
-	}, targetId, js_method_name, zvalPtrs, js_argc, size);
+	}, targetId, method_name, args, argc, size);
 
 	if(!js_ret)
 	{

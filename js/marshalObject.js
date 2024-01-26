@@ -1,6 +1,6 @@
 const zvalSym = Symbol('ZVAL');
 
-Module.marshalObject = ((zvalPtr) => {
+Module.marshalObject = (zvalPtr => {
 
 	const nativeTarget = Module.ccall(
 		'vrzno_expose_zval_is_target'
@@ -26,7 +26,7 @@ Module.marshalObject = ((zvalPtr) => {
 			const keyJson = UTF8ToString(keysLoc);
 			const keys = JSON.parse(keyJson);
 
-			// _free(keysLoc);
+			_free(keysLoc);
 
 			keys.push(...Reflect.ownKeys(target));
 
@@ -115,10 +115,6 @@ Module.marshalObject = ((zvalPtr) => {
 	});
 
 	Object.defineProperty(proxy, zvalSym, {value: `PHP_@{${zvalPtr}}`});
-
-	// if(proxy && ['function','object'].includes(typeof proxy))
-	// {
-	// }
 
 	Module.zvalMap.set(proxy, zvalPtr);
 	Module._zvalMap.set(zvalPtr, proxy);
