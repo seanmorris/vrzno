@@ -79,7 +79,12 @@ Module.marshalObject = (zvalPtr => {
 
 			_free(namePtr);
 
-			return proxy ?? Reflect.get(target, prop);
+			if(proxy == null) // nullISH check (==)
+			{
+				return Reflect.get(target, prop);
+			}
+
+			return proxy;
 		},
 		getOwnPropertyDescriptor: (target, prop) => {
 			if(typeof prop === 'symbol' || prop in target)
