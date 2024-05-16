@@ -56,15 +56,19 @@ static struct _zend_class_entry *vrzno_create_class(long targetId)
 
 	vrzno_subclass_entry->create_object = vrzno_create_object;
 	vrzno_subclass_entry->get_iterator  = vrzno_array_get_iterator;
-
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 	vrzno_subclass_entry->ce_flags |= ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES;
+#endif
+
 	vrzno_subclass_entry->ce_flags |= ZEND_ACC_LINKED;
 
 	vrzno_subclass_entry->parent = vrzno_class_entry;
 
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 	zend_string *attribute_name_AllowDynamicProperties_class_vrzno = zend_string_init_interned("AllowDynamicProperties", sizeof("AllowDynamicProperties") - 1, 1);
 	zend_add_class_attribute(vrzno_subclass_entry, attribute_name_AllowDynamicProperties_class_vrzno, 0);
 	zend_string_release(attribute_name_AllowDynamicProperties_class_vrzno);
+#endif
 
 	return vrzno_subclass_entry;
 }
@@ -801,7 +805,11 @@ PHP_METHOD(Vrzno, __call)
 	{
 		zval *data;
 
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 		ZEND_HASH_PACKED_FOREACH_VAL(argv, data) {
+#else
+		ZEND_HASH_FOREACH_VAL(argv, data) {
+#endif
 			if(Z_REFCOUNTED_P(data))
 			{
 				args[i] = (zval*) emalloc(argc * sizeof(zval));

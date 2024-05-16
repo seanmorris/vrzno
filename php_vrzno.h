@@ -12,6 +12,8 @@ extern zend_module_entry vrzno_module_entry;
 ZEND_TSRMLS_CACHE_EXTERN()
 # endif
 
+#include <stdbool.h>
+
 typedef struct {
 	zend_object zo;
 	long isFunction;
