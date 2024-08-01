@@ -130,13 +130,17 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 	fcc.called_scope     = NULL;
 	fcc.object           = NULL;
 
-	if(argv)
+	if(argc)
 	{
 		int i;
 		for(i = 0; i < argc; i++)
 		{
 			params[i] = *argv[i];
 		}
+	}
+	else
+	{
+		fci.params = NULL;
 	}
 
 	if(zend_call_function(&fci, &fcc) == SUCCESS)

@@ -28,6 +28,8 @@ Module.targets.add(globalThis);
 
 Module.onRefresh = Module.onRefresh || new Set;
 
+Module.shared = Module.shared || {};
+
 Module.onRefresh.add(() => {
 	Module.callables.clear();
 	Module.targets.clear();
