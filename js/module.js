@@ -1,10 +1,12 @@
 HEAP8 = new Int8Array(1);
 
+Module.hasVrzno = true;
+
 Module.zvalMap  = new WeakMap;
 Module._zvalMap = Module._zvalMap || new Module.WeakerMap;
 
 Module.fRegistry = Module.fRegistry || new FinReg(zvalPtr => {
-	console.log('Garbage collecting! zVal@'+zvalPtr);
+	// console.log('Garbage collecting! zVal@'+zvalPtr);
 	Module.ccall(
 		'vrzno_expose_dec_zrefcount'
 		, 'number'
