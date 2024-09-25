@@ -70,10 +70,10 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_long(long value)
 	return zv;
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double* value)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-	ZVAL_DOUBLE(zv, *value);
+	ZVAL_DOUBLE(zv, value);
 	return zv;
 }
 

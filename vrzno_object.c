@@ -35,7 +35,17 @@ static struct _zend_object *vrzno_create_object(zend_class_entry *class_type)
     zend_object_std_init(&vrzno->zo, class_type);
 
     vrzno->zo.handlers = &vrzno_object_handlers;
-    vrzno->targetId = (long) EM_ASM_INT({ return Module.targets.getId(globalThis); });
+    vrzno->targetId = (long) EM_ASM_INT({
+		const _class = Module._classes.get($0);
+
+		if(_class)
+		{
+			return Module.targets.getId(_class);
+		}
+
+		return Module.targets.getId(globalThis);
+	}, class_type);
+
 	vrzno->isConstructor = 0;
 	vrzno->isFunction = 0;
 
