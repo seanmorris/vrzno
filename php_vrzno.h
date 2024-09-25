@@ -21,6 +21,8 @@ typedef struct {
 	zend_object zo;
 } vrzno_object;
 
+vrzno_object* vrzno_fetch_object(zend_object *obj);
+
 typedef struct {
 	unsigned int errcode;
 	char *errmsg;
@@ -47,6 +49,7 @@ PHP_FUNCTION(vrzno_timeout);
 PHP_FUNCTION(vrzno_new);
 PHP_FUNCTION(vrzno_await);
 PHP_FUNCTION(vrzno_env);
+PHP_FUNCTION(vrzno_shared);
 PHP_FUNCTION(vrzno_import);
 PHP_FUNCTION(vrzno_target);
 

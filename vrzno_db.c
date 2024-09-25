@@ -69,14 +69,11 @@ static zend_long vrzno_handle_doer(pdo_dbh_t *dbh, const zend_string *sql)
 	}, handle->targetId, &sqlString);
 }
 
-
 static zend_string *vrzno_handle_quoter(pdo_dbh_t *dbh, const zend_string *unquoted, enum pdo_param_type paramtype)
 {
-	pdo_vrzno_db_handle *handle = dbh->driver_data;
+	// pdo_vrzno_db_handle *handle = dbh->driver_data;
 	const char *unquotedChar = ZSTR_VAL(unquoted);
-
 	zend_string *quoted = zend_string_init(unquotedChar, strlen(unquotedChar), 0);
-
 	return quoted;
 }
 

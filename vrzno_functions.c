@@ -22,6 +22,10 @@ ZEND_BEGIN_ARG_INFO(arginfo_vrzno_env, 0)
 	ZEND_ARG_INFO(0, str)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO(arginfo_vrzno_shared, 0)
+	ZEND_ARG_INFO(0, str)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_INFO(arginfo_vrzno_import, 0)
 	ZEND_ARG_INFO(0, vrzno_class)
 ZEND_END_ARG_INFO()
@@ -37,6 +41,7 @@ static const zend_function_entry vrzno_functions[] = {
 	PHP_FE(vrzno_new,     arginfo_vrzno_new)
 	PHP_FE(vrzno_await,   arginfo_vrzno_await)
 	PHP_FE(vrzno_env,     arginfo_vrzno_env)
+	PHP_FE(vrzno_shared,  arginfo_vrzno_shared)
 	PHP_FE(vrzno_import,  arginfo_vrzno_import)
 	PHP_FE(vrzno_target,  arginfo_vrzno_target)
 	PHP_FE_END
@@ -199,6 +204,24 @@ PHP_FUNCTION(vrzno_env)
 	ZVAL_COPY(return_value, js_ret);
 }
 
+PHP_FUNCTION(vrzno_shared)
+{
+	char   *name = "";
+	size_t  name_len = sizeof(name) - 1;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STRING(name, name_len)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zval *js_ret = EM_ASM_PTR({
+		const name = UTF8ToString($0);
+		return Module.jsToZval(Module.shared[name]);
+	}, name);
+
+	ZVAL_NULL(return_value);
+	ZVAL_COPY(return_value, js_ret);
+}
+
 PHP_FUNCTION(vrzno_new)
 {
 	zval *zv;
@@ -243,7 +266,6 @@ PHP_FUNCTION(vrzno_new)
 	ZVAL_NULL(return_value);
 	ZVAL_COPY(return_value, js_ret);
 }
-
 
 PHP_FUNCTION(vrzno_import)
 {
