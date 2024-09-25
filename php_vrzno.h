@@ -12,13 +12,13 @@ extern zend_module_entry vrzno_module_entry;
 ZEND_TSRMLS_CACHE_EXTERN()
 # endif
 
-extern PHPAPI int vrzno_exec_callback(zend_function *fptr, zval **argv, int argc);
-extern PHPAPI int vrzno_del_callback(zend_function *fptr);
+#include <stdbool.h>
 
 typedef struct {
-	bool isFunction;
-	long targetId;
 	zend_object zo;
+	long isFunction;
+	bool isConstructor;
+	long targetId;
 } vrzno_object;
 
 vrzno_object* vrzno_fetch_object(zend_object *obj);
@@ -52,6 +52,7 @@ PHP_FUNCTION(vrzno_env);
 PHP_FUNCTION(vrzno_shared);
 PHP_FUNCTION(vrzno_import);
 PHP_FUNCTION(vrzno_target);
+PHP_FUNCTION(vrzno_zval);
 
 // PHP_METHOD(Vrzno, addeventlistener);
 // PHP_METHOD(Vrzno, removeeventlistener);
@@ -60,5 +61,8 @@ PHP_METHOD(Vrzno, __invoke);
 PHP_METHOD(Vrzno, __call);
 PHP_METHOD(Vrzno, __get);
 // PHP_METHOD(Vrzno, __set);
+PHP_METHOD(Vrzno, __construct);
 
-#endif	/* PHP_VRZNO_H */
+#endif
+
+static zend_object_iterator *vrzno_array_get_iterator(zend_class_entry *ce, zval *zv, int by_ref);

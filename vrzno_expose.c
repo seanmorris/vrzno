@@ -1,29 +1,36 @@
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_refcount(zval *zv)
 {
-	// EM_ASM({ console.log('INC ', $0, $1); }, zv, Z_REFCOUNT_P(zv));
 	Z_ADDREF_P(zv);
 }
 
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_refcount(zval *zv)
 {
-	// EM_ASM({ console.log('DEC ', $0, $1); }, zv, Z_REFCOUNT_P(zv));
 	Z_DELREF_P(zv);
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_refcount(zval *zv)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_zrefcount(zval *zv)
 {
 	return Z_REFCOUNT_P(zv);
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(zval *zv, bool isZval)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_crefcount(zend_function *fptr)
 {
-	// printf("EXP_EFREE: %u\n", zv);
-	if(isZval)
-	{
-		Z_DELREF_P(zv);
-	}
+	GC_ADDREF(ZEND_CLOSURE_OBJECT(fptr));
+}
 
-	efree(zv);
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_crefcount(zend_function *fptr)
+{
+	int count = GC_REFCOUNT(ZEND_CLOSURE_OBJECT(fptr));
+
+	if(count)
+	{
+		GC_DELREF(ZEND_CLOSURE_OBJECT(fptr));
+	}
+}
+
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(void *ptr)
+{
+	efree(ptr);
 }
 
 zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
@@ -77,10 +84,10 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
 	return zv;
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction, int isConstructor)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-	vrzno_object *vObj = vrzno_create_object_for_target(target_id, (bool) isFunction);
+	vrzno_object *vObj = vrzno_create_object_for_target(target_id, isFunction, isConstructor);
 	ZVAL_OBJ(zv, &vObj->zo);
 	return zv;
 }
@@ -100,7 +107,10 @@ vrzno_object* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_is_target(zval* zv)
 {
 	if(Z_TYPE_P(zv) != IS_OBJECT || Z_OBJCE_P(zv) != vrzno_class_entry)
 	{
-		return 0;
+		if(Z_OBJCE_P(zv)->parent != vrzno_class_entry)
+		{
+			return 0;
+		}
 	}
 
 	return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
@@ -142,9 +152,10 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
 	php_json_encode_zval(&buf, &keys, 0, &encoder);
 	smart_str_0(&buf);
 
-	char *json = malloc(ZSTR_LEN(buf.s));
+	char *json = malloc(ZSTR_LEN(buf.s) + 1);
 
-	json = ZSTR_VAL(buf.s);
+	memcpy(json, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s) + 1);
+	smart_str_free(&buf);
 
 	return json;
 }
@@ -179,6 +190,11 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
 	char *errstr = NULL;
 
 	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv) == vrzno_class_entry)
+	{
+		return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
+	}
+
+	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv)->parent == vrzno_class_entry)
 	{
 		return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
 	}

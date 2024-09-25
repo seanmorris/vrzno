@@ -16,8 +16,13 @@
 #include "zend_types.h"
 #include "zend_closures.h"
 #include <emscripten.h>
-#include "zend_attributes.h"
 #include "zend_hash.h"
+
+#if PHP_MAJOR_VERSION >= 8
+# include "zend_attributes.h"
+#else
+# include <stdbool.h>
+#endif
 
 /* For compatibility with older PHP versions */
 #ifndef ZEND_PARSE_PARAMETERS_NONE
@@ -48,11 +53,15 @@ PHP_MINIT_FUNCTION(vrzno)
 
 	vrzno_class_entry->create_object = vrzno_create_object;
 	vrzno_class_entry->get_iterator  = vrzno_array_get_iterator;
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 	vrzno_class_entry->ce_flags     |= ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES;
+#endif
 
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 	zend_string *attribute_name_AllowDynamicProperties_class_vrzno = zend_string_init_interned("AllowDynamicProperties", sizeof("AllowDynamicProperties") - 1, 1);
 	zend_add_class_attribute(vrzno_class_entry, attribute_name_AllowDynamicProperties_class_vrzno, 0);
 	zend_string_release(attribute_name_AllowDynamicProperties_class_vrzno);
+#endif
 
 	memcpy(&vrzno_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
 
@@ -733,7 +742,6 @@ PHP_MINIT_FUNCTION(vrzno)
 			{
 				this.byObject  = new WeakMap();
 				this.byInteger = new Module.WeakerMap();
-				this.tacked    = new Map();
 
 				this.id = 0;
 
@@ -813,39 +821,6 @@ PHP_MINIT_FUNCTION(vrzno)
 						{
 							this.byObject.delete(obj);
 							this.byInteger.delete(address);
-						}
-					}
-				});
-
-				Object.defineProperty(this, 'tack', {
-					configurable: false
-					, writable:   false
-					, value:      (target) => {
-						if(!this.tacked.has(target))
-						{
-							this.tacked.set(target, 1);
-						}
-						else
-						{
-							this.tacked.set(target, 1 + this.tacked.get(target));
-						}
-					}
-				});
-
-				Object.defineProperty(this, 'untack', {
-					configurable: false
-					, writable:   false
-					, value:      (target) => {
-						if(!this.tacked.has(target))
-						{
-							return;
-						}
-
-						this.tacked.set(target, -1 + this.tacked.get(target));
-
-						if(this.tacked.get(target) <= 0)
-						{
-							return this.tacked.delete(target);
 						}
 					}
 				});
@@ -929,7 +904,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, i
 	fcc.called_scope     = NULL;
 	fcc.object           = NULL;
 
-	if(argv)
+	if(argc)
 	{
 		int i;
 		for(i = 0; i < argc; i++)

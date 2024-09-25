@@ -1,6 +1,7 @@
 *.lo
 *.la
 .libs
+/lib.js
 acinclude.m4
 aclocal.m4
 autom4te.cache
@@ -27,6 +28,7 @@ missing
 mkinstalldirs
 modules
 run-tests.php
+vrzno_js.h
 tests/*/*.diff
 tests/*/*.out
 tests/*/*.php
