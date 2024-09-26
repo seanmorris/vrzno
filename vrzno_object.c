@@ -83,26 +83,26 @@ static struct _zend_class_entry *vrzno_create_class(long targetId)
 	return vrzno_subclass_entry;
 }
 
-static vrzno_object *vrzno_create_object_for_target(int target_id, int isFunction, bool isConstructor)
+static vrzno_object *vrzno_create_object_for_target(int targetId, int isFunction, bool isConstructor)
 {
 	zend_class_entry *ce = vrzno_class_entry;
 
 	if(isConstructor)
 	{
-		zend_class_entry *existing = EM_ASM_INT({
+		zend_class_entry *existing = EM_ASM_PTR({
 			const target = Module.targets.get($0);
 			return Module.classes.get(target);
-		}, target_id);
+		}, targetId);
 
 		if(!existing)
 		{
-			ce = vrzno_create_class(target_id);
+			ce = vrzno_create_class(targetId);
 
 			EM_ASM({
 				const target = Module.targets.get($0);
 				Module.classes.set(target, $1);
 				Module._classes.set($1, target);
-			}, target_id, ce);
+			}, targetId, ce);
 		}
 		else
 		{
@@ -115,7 +115,7 @@ static vrzno_object *vrzno_create_object_for_target(int target_id, int isFunctio
     zend_object_std_init(&vrzno->zo, ce);
 
 	vrzno->zo.handlers = &vrzno_object_handlers;
-    vrzno->targetId = target_id;
+    vrzno->targetId = targetId;
 	vrzno->isConstructor = isConstructor;
 	vrzno->isFunction = isFunction;
 
@@ -124,12 +124,14 @@ static vrzno_object *vrzno_create_object_for_target(int target_id, int isFunctio
 
 static void vrzno_object_free(zend_object *zobj)
 {
-	// vrzno_object *vrzno = vrzno_fetch_object(zobj);
-	// EM_ASM({
-	// 	console.log('FREE', $0, $1, $2);
-	// 	// Module.fRegistry.unregister(Module.targets.get($1));
-	// 	// Module.targets.remove($1);
-	// }, vrzno, zobj, &vrzno->zo);
+	EM_ASM({
+		const target = Module.targets.get($0);
+		if(target)
+		{
+			Module.tacked.delete(target);
+			Module.fRegistry.unregister(target);
+		}
+	}, vrzno_fetch_object(zobj)->targetId);
 
 	zend_object_std_dtor(zobj);
 }
@@ -912,9 +914,8 @@ PHP_METHOD(Vrzno, __construct)
 	zval         *object   = getThis();
 	zend_object  *zObject  = object->value.obj;
 	vrzno_object *vrzno    = vrzno_fetch_object(zObject);
-	long          targetId = vrzno->targetId;
 
-	if(Z_OBJCE_P(object) == vrzno_class_entry || targetId != 1)
+	if(Z_OBJCE_P(object) == vrzno_class_entry)
 	{
 		return;
 	}
@@ -942,6 +943,8 @@ PHP_METHOD(Vrzno, __construct)
 
 		const _object = new _class(...args);
 		const index = Module.targets.add(_object);
+
+		Module.tacked.add(_object);
 
 		return index;
 

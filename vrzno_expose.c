@@ -105,12 +105,14 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_set_param(zval** zvals, int index, zval* 
 
 vrzno_object* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_is_target(zval* zv)
 {
-	if(Z_TYPE_P(zv) != IS_OBJECT || Z_OBJCE_P(zv) != vrzno_class_entry)
+	if(Z_TYPE_P(zv) != IS_OBJECT)
 	{
-		if(Z_OBJCE_P(zv)->parent != vrzno_class_entry)
-		{
-			return 0;
-		}
+		return 0;
+	}
+
+	if(Z_OBJCE_P(zv) != vrzno_class_entry && Z_OBJCE_P(zv)->parent != vrzno_class_entry)
+	{
+		return 0;
 	}
 
 	return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;

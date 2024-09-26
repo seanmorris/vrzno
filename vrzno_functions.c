@@ -203,7 +203,7 @@ PHP_FUNCTION(vrzno_env)
 
 	zval *js_ret = EM_ASM_PTR({
 		const name = UTF8ToString($0);
-		return Module.jsToZval((name in Module.shared) ? Module.shared[name] : Module[name]);
+		return Module.jsToZval(Module[name]);
 	}, name);
 
 	ZVAL_NULL(return_value);
