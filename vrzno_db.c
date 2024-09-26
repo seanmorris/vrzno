@@ -69,13 +69,10 @@ static zend_long vrzno_handle_doer(pdo_dbh_t *dbh, const zend_string *sql)
 	}, handle->targetId, &sqlString);
 }
 
-
 static zend_string *vrzno_handle_quoter(pdo_dbh_t *dbh, const zend_string *unquoted, enum pdo_param_type paramtype)
 {
 	const char *unquotedChar = ZSTR_VAL(unquoted);
-
 	zend_string *quoted = zend_string_init(unquotedChar, strlen(unquotedChar), 0);
-
 	return quoted;
 }
 
@@ -135,8 +132,12 @@ static zend_string *pdo_vrzno_last_insert_id(pdo_dbh_t *dbh, const zend_string *
 {
 	pdo_vrzno_db_handle *handle = dbh->driver_data;
 	const char *nameStr = ZSTR_VAL(name);
-
-	return zend_ulong_to_str(EM_ASM_INT({
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 1
+	return zend_ulong_to_str
+#else
+	return zend_long_to_str
+#endif
+	(EM_ASM_INT({
 
 		console.log('LAST INSERT ID', $0, UTF8ToString($1));
 

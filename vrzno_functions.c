@@ -22,12 +22,20 @@ ZEND_BEGIN_ARG_INFO(arginfo_vrzno_env, 0)
 	ZEND_ARG_INFO(0, str)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO(arginfo_vrzno_shared, 0)
+	ZEND_ARG_INFO(0, str)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_INFO(arginfo_vrzno_import, 0)
 	ZEND_ARG_INFO(0, vrzno_class)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO(arginfo_vrzno_target, 0)
 	ZEND_ARG_INFO(0, vrzno_class)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_vrzno_zval, 0)
+	ZEND_ARG_INFO(0, value)
 ZEND_END_ARG_INFO()
 
 static const zend_function_entry vrzno_functions[] = {
@@ -37,8 +45,10 @@ static const zend_function_entry vrzno_functions[] = {
 	PHP_FE(vrzno_new,     arginfo_vrzno_new)
 	PHP_FE(vrzno_await,   arginfo_vrzno_await)
 	PHP_FE(vrzno_env,     arginfo_vrzno_env)
+	PHP_FE(vrzno_shared,  arginfo_vrzno_shared)
 	PHP_FE(vrzno_import,  arginfo_vrzno_import)
 	PHP_FE(vrzno_target,  arginfo_vrzno_target)
+	PHP_FE(vrzno_zval,    arginfo_vrzno_zval)
 	PHP_FE_END
 };
 
@@ -192,7 +202,26 @@ PHP_FUNCTION(vrzno_env)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zval *js_ret = EM_ASM_PTR({
-		return Module.jsToZval(Module[UTF8ToString($0)]);
+		const name = UTF8ToString($0);
+		return Module.jsToZval(Module[name]);
+	}, name);
+
+	ZVAL_NULL(return_value);
+	ZVAL_COPY(return_value, js_ret);
+}
+
+PHP_FUNCTION(vrzno_shared)
+{
+	char   *name = "";
+	size_t  name_len = sizeof(name) - 1;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STRING(name, name_len)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zval *js_ret = EM_ASM_PTR({
+		const name = UTF8ToString($0);
+		return Module.jsToZval(Module.shared[name]);
 	}, name);
 
 	ZVAL_NULL(return_value);
@@ -244,7 +273,6 @@ PHP_FUNCTION(vrzno_new)
 	ZVAL_COPY(return_value, js_ret);
 }
 
-
 PHP_FUNCTION(vrzno_import)
 {
 	zval *js_ret;
@@ -277,4 +305,20 @@ PHP_FUNCTION(vrzno_target)
 	long targetId = vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
 
 	ZVAL_LONG(return_value, targetId);
+}
+
+PHP_FUNCTION(vrzno_zval)
+{
+	zval *zv;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(zv)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if(Z_REFCOUNTED_P(zv))
+	{
+		Z_ADDREF_P(zv);
+	}
+
+	ZVAL_LONG(return_value, zv);
 }

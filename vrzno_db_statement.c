@@ -1,15 +1,12 @@
 static int pdo_vrzno_stmt_dtor(pdo_stmt_t *stmt)
 {
 	pdo_vrzno_stmt *vStmt = (pdo_vrzno_stmt*)stmt->driver_data;
-
 	efree(vStmt);
-
 	return 1;
 }
 
 EM_ASYNC_JS(zval*, pdo_vrzno_real_stmt_execute, (long targetId), {
-
-	let statement = Module.targets.get(targetId);
+	const statement = Module.targets.get(targetId);
 
 	if(!Module.PdoParams.has(statement))
 	{
@@ -32,7 +29,6 @@ EM_ASYNC_JS(zval*, pdo_vrzno_real_stmt_execute, (long targetId), {
 	}
 
 	return Module.jsToZval(result.results);
-
 });
 
 static int pdo_vrzno_stmt_execute(pdo_stmt_t *stmt)
@@ -149,7 +145,6 @@ static int pdo_vrzno_stmt_describe_col(pdo_stmt_t *stmt, int colno)
 		return 0;
 
 	}, vrzno_fetch_object(Z_OBJ_P(vStmt->results))->targetId, colno);
-
 
 	if(!colName)
 	{

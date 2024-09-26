@@ -1,36 +1,39 @@
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_refcount(zval *zv)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_refcount(zval *zv)
 {
-	// EM_ASM({ console.log('INC ', $0, $1); }, zv, Z_REFCOUNT_P(zv));
 	Z_ADDREF_P(zv);
-	return NULL;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_refcount(zval *zv)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_refcount(zval *zv)
 {
-	// EM_ASM({ console.log('DEC ', $0, $1); }, zv, Z_REFCOUNT_P(zv));
 	Z_DELREF_P(zv);
-	return NULL;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_refcount(zval *zv)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_zrefcount(zval *zv)
 {
 	return Z_REFCOUNT_P(zv);
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(zval *zv, bool isZval)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_crefcount(zend_function *fptr)
 {
-	if(isZval)
-	{
-		// printf("EXP_DELREF: %u\n", (int) zv);
-		Z_DELREF_P(zv);
-	}
-
-	// printf("EXP_EFREE: %u\n", (int) zv);
-	efree(zv);
+	GC_ADDREF(ZEND_CLOSURE_OBJECT(fptr));
 }
 
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_crefcount(zend_function *fptr)
+{
+	int count = GC_REFCOUNT(ZEND_CLOSURE_OBJECT(fptr));
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
+	if(count)
+	{
+		GC_DELREF(ZEND_CLOSURE_OBJECT(fptr));
+	}
+}
+
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(void *ptr)
+{
+	efree(ptr);
+}
+
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
 
@@ -46,50 +49,50 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_null(void)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_null(void)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-    ZVAL_NULL(zv);
+	ZVAL_NULL(zv);
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_undef(void)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_undef(void)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-    ZVAL_UNDEF(zv);
+	ZVAL_UNDEF(zv);
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_long(long value)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_long(long value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-    ZVAL_LONG(zv, value);
+	ZVAL_LONG(zv, value);
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double* value)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-	ZVAL_DOUBLE(zv, *value);
+	ZVAL_DOUBLE(zv, value);
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
 	ZVAL_STRING(zv, value);
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction, int isConstructor)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction, int isConstructor)
 {
 	zval *zv = (zval*) emalloc(sizeof(zval));
-	vrzno_object *vObj = vrzno_create_object_for_target(target_id, (bool) isFunction, (bool) isConstructor);
+	vrzno_object *vObj = vrzno_create_object_for_target(target_id, isFunction, isConstructor);
 	ZVAL_OBJ(zv, &vObj->zo);
 	return zv;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_create_params(int argc)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_params(int argc)
 {
 	zval *zvals = (zval*) emalloc(argc * sizeof(zval*));
 	return zvals;
@@ -100,14 +103,14 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_set_param(zval** zvals, int index, zval* 
 	zvals[index] = arg;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_is_target(zval* zv)
+vrzno_object* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_is_target(zval* zv)
 {
 	if(Z_TYPE_P(zv) != IS_OBJECT)
 	{
 		return 0;
 	}
 
-	if(Z_OBJCE_P(zv) != vrzno_class_entry)
+	if(Z_OBJCE_P(zv) != vrzno_class_entry && Z_OBJCE_P(zv)->parent != vrzno_class_entry)
 	{
 		if(Z_OBJCE_P(zv)->parent != vrzno_class_entry)
 		{
@@ -118,7 +121,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_is_target(zval* zv)
 	return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
+char* EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
 {
 	if (Z_TYPE_P(zv) != IS_OBJECT)
 	{
@@ -144,6 +147,8 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
 		}
 	} ZEND_HASH_FOREACH_END();
 
+	index = NULL;
+
 	smart_str buf = {0};
 
 	php_json_encoder  encoder;
@@ -152,11 +157,26 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
 	php_json_encode_zval(&buf, &keys, 0, &encoder);
 	smart_str_0(&buf);
 
-	char *json = malloc(ZSTR_LEN(buf.s));
+	char *json = malloc(ZSTR_LEN(buf.s) + 1);
 
-	json = ZSTR_VAL(buf.s);
+	memcpy(json, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s) + 1);
+	smart_str_free(&buf);
 
 	return json;
+}
+
+// char* EMSCRIPTEN_KEEPALIVE vrzno_expose_array_keys(zval *zv)
+// {
+// 	if (Z_TYPE_P(zv) != IS_ARRAY)
+// 	{
+// 		return NULL;
+// 	}
+// }
+
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_deref(zval* zv)
+{
+	ZVAL_DEREF(zv);
+	return zv;
 }
 
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_dump(zval* zv)
@@ -192,53 +212,37 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
 	return NULL;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_long(zval *zv)
+zend_long* EMSCRIPTEN_KEEPALIVE vrzno_expose_long(zval *zv)
 {
 	return Z_LVAL_P(zv);
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_double(zval *zv)
+double* EMSCRIPTEN_KEEPALIVE vrzno_expose_double(zval *zv)
 {
 	return &Z_DVAL_P(zv);
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_string(zval *zv)
+char* EMSCRIPTEN_KEEPALIVE vrzno_expose_string(zval *zv)
 {
 	return Z_STRVAL_P(zv);
 }
 
-
-
+// Deprecate?
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_type(zval *object, char *name)
 {
 	zval *rv = NULL;
 
-	// EM_ASM({ console.log('TYPE_CHECK', $0, $1, $2, $3, $4, $5, $6); }, object, Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
-	// if (data == &EG(uninitialized_zval)) {
-	// 	return NULL;
-	// }
-
-	// ZVAL_DEREF(data);
 
 	return Z_TYPE_P(data);
 }
 
+// Deprecate?
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_callable(zval *object, char *name)
 {
 	zval *rv = NULL;
 
-	// EM_ASM({ console.log('CALL_CHECK', $0, $1, $2, $3, $4, $5, $6); }, object, Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
-	// if (data == &EG(uninitialized_zval)) {
-	// 	return NULL;
-	// }
-
-	// ZVAL_DEREF(data);
 
 	zend_fcall_info_cache fcc;
 	char *errstr = NULL;
@@ -251,62 +255,53 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_callable(zval *object, char *name
 	return NULL;
 }
 
+// Deprecate?
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_long(zval *object, char *name)
 {
 	zval *rv = NULL;
 
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 
-	// if (data == &EG(uninitialized_zval)) {
-	// 	return NULL;
-	// }
-
-	// ZVAL_DEREF(data);
-
 	return Z_LVAL_P(data);
 }
 
+// Deprecate?
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_double(zval *object, char *name)
 {
 	zval *rv = NULL;
 
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 
-	// if (data == &EG(uninitialized_zval)) {
-	// 	return NULL;
-	// }
-
-	// ZVAL_DEREF(data);
-
 	return &Z_DVAL_P(data);
 }
 
+// Deprecate?
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_string(zval *object, char *name)
 {
 	zval *rv = NULL;
 
 	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 
-	// if (data == &EG(uninitialized_zval)) {
-	// 	return NULL;
-	// }
-
-	// ZVAL_DEREF(data);
-
 	return Z_STRVAL_P(data);
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_pointer(zval *object, char *name)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_property_pointer(zval *object, char *name)
 {
 	zval *rv = NULL;
-
-	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
-	return data;
+	return zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
 }
 
-// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_type(zval *object, char *name)
-// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_long(zval *object, char *name)
-// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_double(zval *object, char *name)
-// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_string(zval *object, char *name)
-// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zval *object, char *name)
+// Deprecate?
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_type(zval *object, unsigned offset)
+{
+	zval *data = zend_hash_index_find(Z_ARRVAL_P(object), offset);
+	return Z_TYPE_P(data);
+}
+
+// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_long(zval *object, unsigned offset)
+// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_double(zval *object, unsigned offset)
+// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_string(zval *object, unsigned offset)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zval *object, unsigned offset)
+{
+	return zend_hash_index_find(Z_ARRVAL_P(object), offset);
+}
