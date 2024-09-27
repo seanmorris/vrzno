@@ -43,7 +43,7 @@ static struct _zend_object *vrzno_create_object(zend_class_entry *class_type)
 			return Module.targets.getId(_class);
 		}
 
-		return Module.targets.getId(globalThis);
+		return Module.targets.add(globalThis);
 	}, class_type);
 
 	vrzno->isConstructor = 0;
@@ -190,7 +190,6 @@ zval *vrzno_read_property(zend_object *object, zend_string *member, int type, vo
 			{
 				index = Module.targets.add(result);
 				Module.zvalMap.set(result, zvalPtr);
-				Module._zvalMap.set(zvalPtr, result);
 			}
 
 			return index;
@@ -449,7 +448,6 @@ zval *vrzno_read_dimension(zend_object *object, zval *offset, int type, zval *rv
 			{
 				index = Module.targets.add(result);
 				Module.zvalMap.set(result, zvalPtr);
-				Module._zvalMap.set(zvalPtr, result);
 			}
 
 			return index;

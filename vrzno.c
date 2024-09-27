@@ -6,6 +6,8 @@
 
 #include "php.h"
 #include "php_ini.h"
+#include "SAPI.h"
+
 #include "ext/standard/info.h"
 #include "ext/standard/php_var.h"
 #include "../pdo/php_pdo_driver.h"
@@ -861,8 +863,16 @@ PHP_MINIT_FUNCTION(vrzno)
 PHP_MINFO_FUNCTION(vrzno)
 {
 	php_info_print_table_start();
-	php_info_print_table_header(2, "vrzno support", "enabled");
+	php_info_print_table_row(2, "Vrzno support for php-wasm", "enabled");
 	php_info_print_table_end();
+
+	if (!sapi_module.phpinfo_as_text) {
+		php_info_print_box_start(0);
+		PUTS("<a href=\"https://github.com/seanmorris/php-wasm\">");
+		PUTS("<img border=\"0\" src=\"");
+		PUTS(VRZNO_ICON_DATA_URI "\" alt=\"Zend logo\" /></a>\n");
+		php_info_print_box_end();
+	}
 }
 
 zend_module_entry vrzno_module_entry = {

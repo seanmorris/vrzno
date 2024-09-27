@@ -82,8 +82,8 @@ PHP_FUNCTION(vrzno_eval)
 
 PHP_FUNCTION(vrzno_run)
 {
-	zend_string      *retval;
-	zend_long         opt = 0;
+	zend_string *retval;
+	zend_long opt = 0;
 
 	char   *js_funcname     = "";
 	size_t  js_funcname_len = sizeof(js_funcname) - 1;
