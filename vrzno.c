@@ -80,10 +80,19 @@ PHP_MINIT_FUNCTION(vrzno)
 	// vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
 
 	EM_ASM({
+		const IS_UNDEF  = 0;
+		const IS_NULL   = 1;
+		const IS_FALSE  = 2;
+		const IS_TRUE   = 3;
+		const IS_LONG   = 4;
+		const IS_DOUBLE = 5;
+		const IS_STRING = 6;
+		const IS_ARRAY  = 7;
+		const IS_OBJECT = 8;
+
 		Module.hasVrzno = true;
 		Module.zvalMap = new WeakMap;
 		Module.isTarget = Symbol('IS_TARGET');
-
 		Module.tacked = new Set;
 
 		const FinReg = globalThis.FinalizationRegistry || class { // Polyfill for cloudflare
@@ -108,12 +117,30 @@ PHP_MINIT_FUNCTION(vrzno)
 
 		Module.bufferMaps = new WeakMap;
 
+		const getRegistry = weakerMap => {
+			const registry = new FinalizationRegistry(key => {
+				if(weakerMap.registry !== registry)
+				{
+					return;
+				}
+
+				if(weakerMap.map.has(key) && weakerMap.map.get(key).deref())
+				{
+					return;
+				}
+
+				weakerMap.delete(key);
+			});
+
+			return registry;
+		};
+
 		Module.WeakerMap = Module.WeakerMap || (class WeakerMap
 		{
 			constructor(entries)
 			{
-				this.registry = new FinReg(held => this.delete(held));
 				this.map = new Map;
+				this.registry = getRegistry(this);
 				entries && entries.forEach(([key, value]) => this.set(key, value));
 			}
 
@@ -124,18 +151,24 @@ PHP_MINIT_FUNCTION(vrzno)
 
 			clear()
 			{
+				this.registry = getRegistry(this);
 				this.map.clear();
 			}
 
 			delete(key)
 			{
+				if(!this.has(key))
+				{
+					return;
+				}
+
+				this.registry.unregister(this.get(key));
 				this.map.delete(key);
 			}
 
 			[Symbol.iterator]()
 			{
 				const mapIterator = this.map[Symbol.iterator]();
-
 				return {
 					next: () => {
 						do
@@ -148,6 +181,7 @@ PHP_MINIT_FUNCTION(vrzno)
 							}
 
 							const [key, ref] = entry.value;
+
 							const value = ref.deref();
 
 							if(!value)
@@ -183,7 +217,14 @@ PHP_MINIT_FUNCTION(vrzno)
 					return;
 				}
 
-				return this.map.get(key).deref();
+				const value = this.map.get(key).deref();
+
+				if(!value)
+				{
+					this.map.delete(key);
+				}
+
+				return value;
 			}
 
 			has(key)
@@ -200,7 +241,7 @@ PHP_MINIT_FUNCTION(vrzno)
 					this.map.delete(key);
 				}
 
-				return result;
+				return Boolean(result);
 			}
 
 			keys()
@@ -231,10 +272,7 @@ PHP_MINIT_FUNCTION(vrzno)
 			}
 		});
 
-		Module.classes  = Module.classes  || new WeakMap;
-		Module._classes = Module._classes || new Module.WeakerMap;
-
-		Module.marshalObject = ((zvalPtr) => {
+		Module.marshalObject = ((zvalPtr, type) => {
 			const nativeTarget = Module.ccall(
 				'vrzno_expose_zval_is_target'
 				, 'number'
@@ -249,20 +287,36 @@ PHP_MINIT_FUNCTION(vrzno)
 
 			const proxy = new Proxy({}, {
 				ownKeys: (target) => {
-					const keysLoc = Module.ccall(
-						'vrzno_expose_object_keys'
-						, 'number'
-						, ['number']
-						, [zvalPtr]
-					);
+					let keysLoc;
+					if(type === IS_ARRAY)
+					{
+						keysLoc = Module.ccall(
+							'vrzno_expose_array_keys'
+							, 'number'
+							, ['number']
+							, [zvalPtr]
+						);
+					}
+					else if(type === IS_OBJECT)
+					{
+						keysLoc = Module.ccall(
+							'vrzno_expose_object_keys'
+							, 'number'
+							, ['number']
+							, [zvalPtr]
+						);
+					}
 
-					const keyJson = UTF8ToString(keysLoc);
-					const keys = JSON.parse(keyJson);
-					_free(keysLoc);
+					if(keysLoc)
+					{
+						const keyJson = UTF8ToString(keysLoc);
+						const keys = JSON.parse(keyJson);
+						_free(keysLoc);
+						keys.push(...Reflect.ownKeys(target));
+						return keys;
+					}
 
-					keys.push(...Reflect.ownKeys(target));
-
-					return keys;
+					return [];
 				},
 				has: (target, prop) => {
 					switch(typeof prop)
@@ -298,6 +352,35 @@ PHP_MINIT_FUNCTION(vrzno)
 				},
 				get: (target, prop) => {
 					let retPtr;
+					if(type !== IS_ARRAY)
+					{
+						// Error ?
+					}
+					if(prop === Symbol.iterator)
+					{
+						return () => {
+							const max = Module.ccall(
+								'vrzno_expose_array_length'
+								, 'number'
+								, ['number']
+								, [zvalPtr]
+							);
+
+							let current = 0;
+
+							return {
+								next() {
+									const done = current++ >= max;
+									return {done, value: Module.zvalToJS(Module.ccall(
+										'vrzno_expose_dimension_pointer'
+										, 'number'
+										, ['number', 'number']
+										, [zvalPtr, -1 + current]
+									))};
+								}
+							}
+						};
+					}
 					switch(typeof prop)
 					{
 						case 'number':
@@ -310,17 +393,29 @@ PHP_MINIT_FUNCTION(vrzno)
 							break;
 
 						case 'string':
+							prop = String(prop);
 							const len = lengthBytesUTF8(prop) + 1;
 							const namePtr = _malloc(len);
-
 							stringToUTF8(prop, namePtr, len);
 
-							retPtr = Module.ccall(
-								'vrzno_expose_property_pointer'
-								, 'number'
-								, ['number', 'number']
-								, [zvalPtr, namePtr]
-							);
+							if(type === IS_OBJECT)
+							{
+								retPtr = Module.ccall(
+									'vrzno_expose_property_pointer'
+									, 'number'
+									, ['number', 'number']
+									, [zvalPtr, namePtr]
+								);
+							}
+							else if(type === IS_ARRAY)
+							{
+								retPtr = Module.ccall(
+									'vrzno_expose_key_pointer'
+									, 'number'
+									, ['number', 'number']
+									, [zvalPtr, namePtr]
+								);
+							}
 
 							_free(namePtr);
 
@@ -328,6 +423,11 @@ PHP_MINIT_FUNCTION(vrzno)
 
 						default:
 							return false;
+					}
+
+					if(!retPtr)
+					{
+						return;
 					}
 
 					const proxy = Module.zvalToJS(retPtr);
@@ -355,15 +455,26 @@ PHP_MINIT_FUNCTION(vrzno)
 						case 'string':
 							const len = lengthBytesUTF8(prop) + 1;
 							const namePtr = _malloc(len);
-
 							stringToUTF8(prop, namePtr, len);
 
-							retPtr = Module.ccall(
-								'vrzno_expose_property_pointer'
-								, 'number'
-								, ['number', 'number']
-								, [zvalPtr, namePtr]
-							);
+							if(type === IS_OBJECT)
+							{
+								retPtr = Module.ccall(
+									'vrzno_expose_property_pointer'
+									, 'number'
+									, ['number', 'number']
+									, [zvalPtr, namePtr]
+								);
+							}
+							else if(type === IS_ARRAY)
+							{
+								retPtr = Module.ccall(
+									'vrzno_expose_key_pointer'
+									, 'number'
+									, ['number', 'number']
+									, [zvalPtr, namePtr]
+								);
+							}
 
 							_free(namePtr);
 
@@ -451,14 +562,9 @@ PHP_MINIT_FUNCTION(vrzno)
 				{
 					const result = Module.zvalToJS(zvalPtr);
 
-					if(!result || !['function','object'].includes(typeof result))
+					if(result && ['function','object'].includes(typeof result))
 					{
-						Module.ccall(
-							'vrzno_expose_efree'
-							, 'number'
-							, ['number']
-							, [zvalPtr]
-						);
+						Module.fRegistry.register(result, zvalPtr, result);
 					}
 
 					return result;
@@ -480,15 +586,22 @@ PHP_MINIT_FUNCTION(vrzno)
 		});
 
 		Module.zvalToJS = Module.zvalToJS || (zvalPtr => {
-			const IS_UNDEF  = 0;
-			const IS_NULL   = 1;
-			const IS_FALSE  = 2;
-			const IS_TRUE   = 3;
-			const IS_LONG   = 4;
-			const IS_DOUBLE = 5;
-			const IS_STRING = 6;
-			const IS_ARRAY  = 7;
-			const IS_OBJECT = 8;
+			if(!zvalPtr)
+			{
+				return;
+			}
+
+			const isNative = Module.ccall(
+				'vrzno_expose_target'
+				, 'number'
+				, ['number']
+				, [zvalPtr]
+			);
+
+			if(isNative)
+			{
+				return Module.targets.get(isNative);
+			}
 
 			zvalPtr = Module.ccall(
 				'vrzno_expose_zval_deref'
@@ -597,7 +710,7 @@ PHP_MINIT_FUNCTION(vrzno)
 
 				case IS_ARRAY:
 				case IS_OBJECT:
-					const proxy = Module.marshalObject(zvalPtr);
+					const proxy = Module.marshalObject(zvalPtr, type);
 
 					Module.ccall(
 						'vrzno_expose_inc_refcount'
@@ -831,7 +944,6 @@ PHP_MINIT_FUNCTION(vrzno)
 		Module.classes = Module.classes || new WeakMap();
 		Module._classes = Module._classes || new Module.WeakerMap();
 		Module.callables = Module.callables || new Module.WeakerMap();
-
 		Module.targets = Module.targets || new Module.UniqueIndex;
 
 		Module.targets.add(globalThis);

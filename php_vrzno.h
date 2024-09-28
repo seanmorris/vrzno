@@ -62,6 +62,7 @@ PHP_METHOD(Vrzno, __call);
 PHP_METHOD(Vrzno, __get);
 // PHP_METHOD(Vrzno, __set);
 PHP_METHOD(Vrzno, __construct);
+PHP_METHOD(Vrzno, __destruct);
 
 static zend_object_iterator *vrzno_array_get_iterator(zend_class_entry *ce, zval *zv, int by_ref);
 

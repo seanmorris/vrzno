@@ -16,11 +16,15 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_INFO_EX(arginfo___construct, 0, 0, -1)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo___destruct, 0, 0, -1)
+ZEND_END_ARG_INFO()
+
 static const zend_function_entry vrzno_vrzno_methods[] = {
 	PHP_ME(Vrzno, __invoke,    arginfo___invoke,    ZEND_ACC_PUBLIC)
 	PHP_ME(Vrzno, __call,      arginfo___call,      ZEND_ACC_PUBLIC)
 	PHP_ME(Vrzno, __get,       arginfo___get,       ZEND_ACC_PUBLIC)
 	PHP_ME(Vrzno, __construct, arginfo___construct, ZEND_ACC_PUBLIC)
+	PHP_ME(Vrzno, __destruct,  arginfo___destruct,  ZEND_ACC_PUBLIC)
 	PHP_FE_END
 };
 
@@ -947,10 +951,22 @@ PHP_METHOD(Vrzno, __construct)
 
 		const _object = new _class(...args);
 		const index = Module.targets.add(_object);
-
 		Module.tacked.add(_object);
 
 		return index;
 
 	}, Z_OBJCE_P(object), argv, argc, size);
+}
+
+PHP_METHOD(Vrzno, __destruct)
+{
+	zval         *object   = getThis();
+	zend_object  *zObject  = object->value.obj;
+	vrzno_object *vrzno    = vrzno_fetch_object(zObject);
+
+	EM_ASM({
+		const target = Module.targets.get($0);
+		Module.zvalMap.delete(target);
+		Module.targets.remove(target);
+	}, vrzno->targetId);
 }

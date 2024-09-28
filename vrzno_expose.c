@@ -112,10 +112,7 @@ vrzno_object* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_is_target(zval* zv)
 
 	if(Z_OBJCE_P(zv) != vrzno_class_entry && Z_OBJCE_P(zv)->parent != vrzno_class_entry)
 	{
-		if(Z_OBJCE_P(zv)->parent != vrzno_class_entry)
-		{
-			return 0;
-		}
+		return 0;
 	}
 
 	return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
@@ -165,13 +162,42 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
 	return json;
 }
 
-// char* EMSCRIPTEN_KEEPALIVE vrzno_expose_array_keys(zval *zv)
-// {
-// 	if (Z_TYPE_P(zv) != IS_ARRAY)
-// 	{
-// 		return NULL;
-// 	}
-// }
+char* EMSCRIPTEN_KEEPALIVE vrzno_expose_array_keys(zval *zv)
+{
+	if (Z_TYPE_P(zv) != IS_ARRAY)
+	{
+		return NULL;
+	}
+
+	zval keys;
+	array_init(&keys);
+	zend_string *key;
+	zend_ulong	*index;
+
+	ZEND_HASH_FOREACH_KEY(Z_ARRVAL_P(zv), index, key) {
+		if(key)
+		{
+			add_next_index_string(&keys, ZSTR_VAL(key));
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	index = NULL;
+
+	smart_str buf = {0};
+
+	php_json_encoder  encoder;
+	php_json_encode_init(&encoder);
+	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
+	php_json_encode_zval(&buf, &keys, 0, &encoder);
+	smart_str_0(&buf);
+
+	char *json = malloc(ZSTR_LEN(buf.s) + 1);
+
+	memcpy(json, ZSTR_VAL(buf.s), ZSTR_LEN(buf.s) + 1);
+	smart_str_free(&buf);
+
+	return json;
+}
 
 zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_deref(zval* zv)
 {
@@ -189,20 +215,40 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_type(zval *zv)
 	return Z_TYPE_P(zv);
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_array_length(zval *zv)
 {
-	zend_fcall_info_cache fcc;
-	char *errstr = NULL;
+	return zend_hash_num_elements(Z_ARRVAL_P(zv));
+}
 
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zval *zv)
+{
 	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv) == vrzno_class_entry)
 	{
-		return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
+		return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
 	}
 
 	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv)->parent == vrzno_class_entry)
 	{
-		return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
+		return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
 	}
+
+	return NULL;
+}
+
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
+{
+	// if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv) == vrzno_class_entry)
+	// {
+	// 	return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
+	// }
+
+	// if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv)->parent == vrzno_class_entry)
+	// {
+	// 	return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
+	// }
+
+	zend_fcall_info_cache fcc;
+	char *errstr = NULL;
 
 	if(zend_is_callable_ex(zv, NULL, 0, NULL, &fcc, &errstr))
 	{
@@ -304,4 +350,12 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_type(zval *object, unsigned offs
 zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zval *object, unsigned offset)
 {
 	return zend_hash_index_find(Z_ARRVAL_P(object), offset);
+}
+
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_key_pointer(zval *object, char *key)
+{
+	zend_string *zKey = zend_string_init(key, strlen(key), 0);
+	zval *rv = zend_hash_find(Z_ARRVAL_P(object), zKey);
+	zend_string_release(zKey);
+	return rv;
 }

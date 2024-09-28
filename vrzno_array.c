@@ -124,9 +124,6 @@ static const zend_object_iterator_funcs vrzno_array_it_funcs = {
 
 static zend_object_iterator *vrzno_array_get_iterator(zend_class_entry *ce, zval *zv, int by_ref)
 {
-	// zend_object  *object = Z_OBJ_P(zv);
-	// vrzno_object *vrzno  = vrzno_fetch_object(object);
-
 	vrzno_array_iterator *iterator = emalloc(sizeof(vrzno_array_iterator));
 	zend_iterator_init(&iterator->it);
 
