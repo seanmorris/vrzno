@@ -23,30 +23,9 @@ typedef struct {
 
 vrzno_object* vrzno_fetch_object(zend_object *obj);
 
-typedef struct {
-	unsigned int errcode;
-	char *errmsg;
-} pdo_vrzno_db_error_info;
-
-typedef struct {
-	long *targetId;
-	pdo_vrzno_db_error_info einfo;
-} pdo_vrzno_db_handle;
-
-typedef struct {
-	pdo_vrzno_db_handle *db;
-	vrzno_object *stmt;
-	unsigned long curr;
-	unsigned long row_count;
-	zval *results;
-	unsigned pre_fetched:1;
-	unsigned done:1;
-} pdo_vrzno_stmt;
-
 PHP_FUNCTION(vrzno_eval);
 PHP_FUNCTION(vrzno_run);
 PHP_FUNCTION(vrzno_timeout);
-PHP_FUNCTION(vrzno_new);
 PHP_FUNCTION(vrzno_await);
 PHP_FUNCTION(vrzno_env);
 PHP_FUNCTION(vrzno_shared);

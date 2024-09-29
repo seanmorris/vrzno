@@ -33,89 +33,59 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(void *ptr)
 	efree(ptr);
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value, zval *rv)
 {
-	zval *zv = (zval*) emalloc(sizeof(zval));
-
 	if(value)
 	{
-		ZVAL_TRUE(zv);
+		ZVAL_TRUE(rv);
 	}
 	else
 	{
-		ZVAL_FALSE(zv);
+		ZVAL_FALSE(rv);
 	}
-
-	return zv;
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_null(void)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_null(zval *rv)
 {
-	zval *zv = (zval*) emalloc(sizeof(zval));
-	ZVAL_NULL(zv);
-	return zv;
+	ZVAL_NULL(rv);
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_undef(void)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_undef(zval *rv)
 {
-	zval *zv = (zval*) emalloc(sizeof(zval));
-	ZVAL_UNDEF(zv);
-	return zv;
+	ZVAL_UNDEF(rv);
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_long(long value)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_long(long value, zval *rv)
 {
-	zval *zv = (zval*) emalloc(sizeof(zval));
-	ZVAL_LONG(zv, value);
-	return zv;
+	ZVAL_LONG(rv, value);
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double value)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_double(double value, zval *rv)
 {
-	zval *zv = (zval*) emalloc(sizeof(zval));
-	ZVAL_DOUBLE(zv, value);
-	return zv;
+	ZVAL_DOUBLE(rv, value);
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value, zval* rv)
 {
-	zval *zv = (zval*) emalloc(sizeof(zval));
-	ZVAL_STRING(zv, value);
-	return zv;
+	ZVAL_STRING(rv, value);
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction, int isConstructor)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction, int isConstructor, zval *rv)
 {
-	zval *zv = (zval*) emalloc(sizeof(zval));
 	vrzno_object *vObj = vrzno_create_object_for_target(target_id, isFunction, isConstructor);
-	ZVAL_OBJ(zv, &vObj->zo);
-	return zv;
+	ZVAL_OBJ(rv, &vObj->zo);
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_create_params(int argc)
+zval** EMSCRIPTEN_KEEPALIVE vrzno_expose_create_params(int argc)
 {
-	zval *zvals = (zval*) emalloc(argc * sizeof(zval*));
+	zval **zvals = (zval**) emalloc(argc * sizeof(zval*));
+
+	for(int i = 0; i < argc; i++)
+	{
+		zvals[i] = (zval*) emalloc(sizeof(zval)); // @todo: Figure when to clear this.
+	}
+
 	return zvals;
-}
-
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_set_param(zval** zvals, int index, zval* arg)
-{
-	zvals[index] = arg;
-}
-
-vrzno_object* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_is_target(zval* zv)
-{
-	if(Z_TYPE_P(zv) != IS_OBJECT)
-	{
-		return 0;
-	}
-
-	if(Z_OBJCE_P(zv) != vrzno_class_entry && Z_OBJCE_P(zv)->parent != vrzno_class_entry)
-	{
-		return 0;
-	}
-
-	return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
 }
 
 char* EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
@@ -205,9 +175,9 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_deref(zval* zv)
 	return zv;
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_dump(zval* zv)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_dump(zval* zv, int depth)
 {
-	php_debug_zval_dump(zv, 1);
+	php_debug_zval_dump(zv, depth);
 }
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_type(zval *zv)
@@ -237,16 +207,6 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zval *zv)
 
 int EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
 {
-	// if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv) == vrzno_class_entry)
-	// {
-	// 	return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
-	// }
-
-	// if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv)->parent == vrzno_class_entry)
-	// {
-	// 	return vrzno_fetch_object(Z_OBJ_P(zv))->isFunction;
-	// }
-
 	zend_fcall_info_cache fcc;
 	char *errstr = NULL;
 
@@ -273,89 +233,21 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_string(zval *zv)
 	return Z_STRVAL_P(zv);
 }
 
-// Deprecate?
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_type(zval *object, char *name)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_property_pointer(zval *zv, char *name)
 {
 	zval *rv = NULL;
-
-	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
-	return Z_TYPE_P(data);
+	return zend_read_property(Z_OBJCE_P(zv), Z_OBJ_P(zv), name, strlen(name), 1, rv);
 }
 
-// Deprecate?
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_callable(zval *object, char *name)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zval *zv, unsigned offset)
 {
-	zval *rv = NULL;
-
-	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
-	zend_fcall_info_cache fcc;
-	char *errstr = NULL;
-
-	if(zend_is_callable_ex(data, NULL, 0, NULL, &fcc, &errstr))
-	{
-		return fcc.function_handler;
-	}
-
-	return NULL;
+	return zend_hash_index_find(Z_ARRVAL_P(zv), offset);
 }
 
-// Deprecate?
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_long(zval *object, char *name)
-{
-	zval *rv = NULL;
-
-	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
-	return Z_LVAL_P(data);
-}
-
-// Deprecate?
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_double(zval *object, char *name)
-{
-	zval *rv = NULL;
-
-	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
-	return &Z_DVAL_P(data);
-}
-
-// Deprecate?
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_property_string(zval *object, char *name)
-{
-	zval *rv = NULL;
-
-	zval *data = zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-
-	return Z_STRVAL_P(data);
-}
-
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_property_pointer(zval *object, char *name)
-{
-	zval *rv = NULL;
-	return zend_read_property(Z_OBJCE_P(object), Z_OBJ_P(object), name, strlen(name), 1, rv);
-}
-
-// Deprecate?
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_type(zval *object, unsigned offset)
-{
-	zval *data = zend_hash_index_find(Z_ARRVAL_P(object), offset);
-	return Z_TYPE_P(data);
-}
-
-// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_long(zval *object, unsigned offset)
-// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_double(zval *object, unsigned offset)
-// int EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_string(zval *object, unsigned offset)
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zval *object, unsigned offset)
-{
-	return zend_hash_index_find(Z_ARRVAL_P(object), offset);
-}
-
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_key_pointer(zval *object, char *key)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_key_pointer(zval *zv, char *key)
 {
 	zend_string *zKey = zend_string_init(key, strlen(key), 0);
-	zval *rv = zend_hash_find(Z_ARRVAL_P(object), zKey);
+	zval *rv = zend_hash_find(Z_ARRVAL_P(zv), zKey);
 	zend_string_release(zKey);
 	return rv;
 }

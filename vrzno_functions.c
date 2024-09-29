@@ -10,10 +10,6 @@ ZEND_BEGIN_ARG_INFO(arginfo_vrzno_timeout, 0)
 	ZEND_ARG_INFO(0, str)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO(arginfo_vrzno_new, 0)
-	ZEND_ARG_INFO(0, vrzno_class)
-ZEND_END_ARG_INFO()
-
 ZEND_BEGIN_ARG_INFO(arginfo_vrzno_await, 0)
 	ZEND_ARG_INFO(0, vrzno_class)
 ZEND_END_ARG_INFO()
@@ -42,7 +38,6 @@ static const zend_function_entry vrzno_functions[] = {
 	PHP_FE(vrzno_eval,    arginfo_vrzno_eval)
 	PHP_FE(vrzno_run,     arginfo_vrzno_run)
 	PHP_FE(vrzno_timeout, arginfo_vrzno_timeout)
-	PHP_FE(vrzno_new,     arginfo_vrzno_new)
 	PHP_FE(vrzno_await,   arginfo_vrzno_await)
 	PHP_FE(vrzno_env,     arginfo_vrzno_env)
 	PHP_FE(vrzno_shared,  arginfo_vrzno_shared)
@@ -170,10 +165,10 @@ PHP_FUNCTION(vrzno_timeout)
 	GC_ADDREF(ZEND_CLOSURE_OBJECT(fcc.function_handler));
 }
 
-EM_ASYNC_JS(zval*, vrzno_await_internal, (long targetId), {
+EM_ASYNC_JS(void, vrzno_await_internal, (long targetId, zval *rv), {
 	const target = Module.targets.get(targetId);
 	const result = await target;
-	return Module.jsToZval(result);
+	Module.jsToZval(result, rv);
 });
 
 PHP_FUNCTION(vrzno_await)
@@ -184,12 +179,7 @@ PHP_FUNCTION(vrzno_await)
 		Z_PARAM_OBJECT_OF_CLASS(zv, vrzno_class_entry)
 	ZEND_PARSE_PARAMETERS_END();
 
-	long targetId = vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
-
-	zval *js_ret = vrzno_await_internal(targetId);
-
-	ZVAL_NULL(return_value);
-	ZVAL_COPY(return_value, js_ret);
+	vrzno_await_internal(vrzno_fetch_object(Z_OBJ_P(zv))->targetId, return_value);
 }
 
 PHP_FUNCTION(vrzno_env)
@@ -201,13 +191,11 @@ PHP_FUNCTION(vrzno_env)
 		Z_PARAM_STRING(name, name_len)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zval *js_ret = EM_ASM_PTR({
+	EM_ASM({
 		const name = UTF8ToString($0);
-		return Module.jsToZval(Module[name]);
-	}, name);
-
-	ZVAL_NULL(return_value);
-	ZVAL_COPY(return_value, js_ret);
+		const rv = $1;
+		Module.jsToZval(Module[name], rv);
+	}, name, return_value);
 }
 
 PHP_FUNCTION(vrzno_shared)
@@ -219,63 +207,15 @@ PHP_FUNCTION(vrzno_shared)
 		Z_PARAM_STRING(name, name_len)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zval *js_ret = EM_ASM_PTR({
+	EM_ASM({
 		const name = UTF8ToString($0);
-		return Module.jsToZval(Module.shared[name]);
-	}, name);
-
-	ZVAL_NULL(return_value);
-	ZVAL_COPY(return_value, js_ret);
-}
-
-PHP_FUNCTION(vrzno_new)
-{
-	zval *zv;
-	zval *argv;
-	int argc = 0;
-
-	ZEND_PARSE_PARAMETERS_START(1, -1)
-		Z_PARAM_OBJECT_OF_CLASS(zv, vrzno_class_entry)
-		Z_PARAM_VARIADIC('*', argv, argc)
-	ZEND_PARSE_PARAMETERS_END();
-
-	long targetId = vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
-
-	int size = sizeof(zval);
-
-	zval *zvalPtrs = (zval*) emalloc(argc * sizeof(zval));
-	int i = 0;
-
-	for(i = 0; i < argc; i++)
-	{
-		ZVAL_NULL(&zvalPtrs[i]);
-        ZVAL_COPY(&zvalPtrs[i], &argv[i]);
-	}
-
-	zval *js_ret = EM_ASM_PTR({
-		const _class = Module.targets.get($0);
-		const argv   = $1;
-		const argc   = $2;
-		const size   = $3;
-		const args   = [];
-
-		for(let i = 0; i < argc; i++)
-		{
-			args.push(Module.zvalToJS(argv + i * size));
-		}
-
-		const _object = new _class(...args);
-
-		return Module.jsToZval(_object);
-	}, targetId, zvalPtrs, argc, size);
-
-	ZVAL_NULL(return_value);
-	ZVAL_COPY(return_value, js_ret);
+		const rv = $1;
+		Module.jsToZval(Module.shared[name], rv);
+	}, name, return_value);
 }
 
 PHP_FUNCTION(vrzno_import)
 {
-	zval *js_ret;
 	char *name;
 	size_t name_len = sizeof(name) - 1;
 
@@ -283,15 +223,11 @@ PHP_FUNCTION(vrzno_import)
 		Z_PARAM_STRING(name, name_len)
 	ZEND_PARSE_PARAMETERS_END();
 
-	js_ret = EM_ASM_PTR({
+	EM_ASM({
 		const name = UTF8ToString($0);
-
-		return Module.jsToZval(import(name));
-
-	}, name);
-
-	ZVAL_NULL(return_value);
-	ZVAL_COPY(return_value, js_ret);
+		const rv = $1;
+		Module.jsToZval(import(name), rv);
+	}, name, return_value);
 }
 
 PHP_FUNCTION(vrzno_target)
@@ -302,9 +238,7 @@ PHP_FUNCTION(vrzno_target)
 		Z_PARAM_OBJECT_OF_CLASS(zv, vrzno_class_entry)
 	ZEND_PARSE_PARAMETERS_END();
 
-	long targetId = vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
-
-	ZVAL_LONG(return_value, targetId);
+	ZVAL_LONG(return_value, vrzno_fetch_object(Z_OBJ_P(zv))->targetId);
 }
 
 PHP_FUNCTION(vrzno_zval)

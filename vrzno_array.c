@@ -54,12 +54,10 @@ static zval *vrzno_array_it_get_current_data(zend_object_iterator *it)
 {
 	vrzno_array_iterator *iter = (vrzno_array_iterator*)it;
 
-	zend_object  *object = Z_OBJ(it->data);
-	vrzno_object *vrzno  = vrzno_fetch_object(object);
-
-	zval *retVal = (long) EM_ASM_INT({
+	EM_ASM({
 		let target = Module.targets.get($0);
 		const property = $1;
+		const rv = $2;
 
 		if(target instanceof ArrayBuffer)
 		{
@@ -71,11 +69,9 @@ static zval *vrzno_array_it_get_current_data(zend_object_iterator *it)
 			target = Module.bufferMaps.get(target);
 		}
 
-		return Module.jsToZval(target[property]);
+		return Module.jsToZval(target[property], rv);
 
-	}, vrzno->targetId, iter->key);
-
-	iter->value = *retVal;
+	}, vrzno_fetch_object(Z_OBJ(it->data))->targetId, iter->key, &iter->value);
 
 	return &iter->value;
 }
@@ -124,7 +120,7 @@ static const zend_object_iterator_funcs vrzno_array_it_funcs = {
 
 static zend_object_iterator *vrzno_array_get_iterator(zend_class_entry *ce, zval *zv, int by_ref)
 {
-	vrzno_array_iterator *iterator = emalloc(sizeof(vrzno_array_iterator));
+	vrzno_array_iterator *iterator = emalloc(sizeof(vrzno_array_iterator)); // @todo: Figure if we need to clear this.
 	zend_iterator_init(&iterator->it);
 
 	ZVAL_OBJ_COPY(&iterator->it.data, Z_OBJ_P(zv));
