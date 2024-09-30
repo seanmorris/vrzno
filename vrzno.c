@@ -36,6 +36,7 @@
 #include "vrzno_object.c"
 #include "vrzno_array.c"
 #include "vrzno_expose.c"
+#include "vrzno_fetch.c"
 #include "vrzno_functions.c"
 
 PHP_RINIT_FUNCTION(vrzno)
@@ -75,6 +76,9 @@ PHP_MINIT_FUNCTION(vrzno)
 	vrzno_object_handlers.has_dimension      = vrzno_has_dimension;
 	vrzno_object_handlers.unset_dimension    = vrzno_unset_dimension;
 	// vrzno_object_handlers.get_class_name     = vrzno_get_class_name;
+
+	php_register_url_stream_wrapper("http", &php_stream_fetch_wrapper);
+	php_register_url_stream_wrapper("https", &php_stream_fetch_wrapper);
 
 	EM_ASM({
 		const IS_UNDEF  = 0;
