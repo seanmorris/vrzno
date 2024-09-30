@@ -3,21 +3,21 @@ typedef struct {
 	size_t fpos;
 } php_stream_fetch_data;
 
-EM_ASYNC_JS(ssize_t, php_stream_fetch_real_read, (char* buf, size_t count, size_t *pos, long targetId), {
+EM_ASYNC_JS(ssize_t, php_stream_fetch_real_read, (char* buf, size_t count, size_t fpos, long targetId), {
 	const {buffer} = Module.targets.get(targetId);
 
-	if(pos >= buffer.length)
+	if(fpos >= buffer.length)
 	{
 		count = 0;
 	}
-	else if(pos + count > buffer.length)
+	else if(fpos + count > buffer.length)
 	{
-		count = buffer.length - pos;
+		count = buffer.length - fpos;
 	}
 
 	if(count)
 	{
-		Module.HEAPU8.set(buffer.slice(pos, pos + count), buf + pos);
+		Module.HEAPU8.set(buffer.slice(fpos, fpos + count), buf + fpos);
 	}
 
 	return count;
@@ -40,6 +40,8 @@ static int php_stream_fetch_close(php_stream *stream, int close_handle)
 		const parsed = Module.targets.get($0);
 		Module.tacked.delete(parsed);
 	}, self->targetId);
+
+	efree(self);
 
 	return 0;
 }
@@ -203,6 +205,7 @@ php_stream *php_stream_fetch_open(
 		char *line = headersv[i];
 		ZVAL_STRINGL(&http_response, line, strlen(line));
 		zend_hash_next_index_insert(Z_ARRVAL_P(response_header), &http_response);
+		free(line);
 	}
 
 	stream = php_stream_alloc(&php_stream_fetch_io_ops, self, NULL, mode);
