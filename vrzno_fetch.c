@@ -73,7 +73,7 @@ EM_ASYNC_JS(ssize_t, php_stream_fetch_real_open, (
 
 	const headersloc = _malloc(ptrsize * headerEntries.length);
 	setValue(headersv, headersloc, '*');
-	setValue(headersc, headerEntries.length, 'i' + (8 * ptrsize));
+	setValue(headersc, headerEntries.length, 'i32');
 
 	let i = 0;
 	for(const [key, val] of headerEntries)
