@@ -4,7 +4,12 @@ typedef struct {
 } php_stream_fetch_data;
 
 EM_ASYNC_JS(ssize_t, php_stream_fetch_real_read, (char* buf, size_t count, size_t fpos, long targetId), {
-	const {buffer} = Module.targets.get(targetId);
+	const {buffer, status, context} = Module.targets.get(targetId);
+
+	if(status >= 400 && !context.ignoreErrors)
+	{
+		return 0;
+	}
 
 	if(fpos >= buffer.length)
 	{
@@ -17,7 +22,7 @@ EM_ASYNC_JS(ssize_t, php_stream_fetch_real_read, (char* buf, size_t count, size_
 
 	if(count)
 	{
-		Module.HEAPU8.set(buffer.slice(fpos, fpos + count), buf + fpos);
+		Module.HEAPU8.set(buffer.slice(fpos, fpos + count), buf);
 	}
 
 	return count;
@@ -42,7 +47,6 @@ static int php_stream_fetch_close(php_stream *stream, int close_handle)
 	}, self->targetId);
 
 	efree(self);
-
 	return 0;
 }
 
@@ -69,29 +73,28 @@ EM_ASYNC_JS(ssize_t, php_stream_fetch_real_open, (
 	const context = Module.targets.get(contextId) || {};
 	const response = await fetch(pathString, context);
 	const buffer = new Uint8Array( await response.arrayBuffer() );
+	const status = response.status;
 
-	const headers = [];
-	const headerEntries = [...response.headers.entries()];
+	const headerLines = [...response.headers.entries()].map(([key, val]) => `${key}: ${val}`);
+	headerLines.unshift(`HTTP/1.1 ${response.status} ${response.statusText}`);
 
-	const headersloc = _malloc(ptrsize * headerEntries.length);
+	const headersloc = _malloc(ptrsize * headerLines.length);
 	setValue(headersv, headersloc, '*');
-	setValue(headersc, headerEntries.length, 'i32');
+	setValue(headersc, headerLines.length, 'i32');
 
 	let i = 0;
-	for(const [key, val] of headerEntries)
+	for(const line of headerLines)
 	{
-		const line = `${key}: ${val}`;
 		const len = lengthBytesUTF8(line);
 		const loc = _malloc(len);
 		stringToUTF8(line, loc, len);
-		headers.push(loc);
 		setValue(headersloc + (i * ptrsize), loc, 'i' + (8 * ptrsize));
 		i++;
 	}
 
-	const parsed = {headers, buffer};
-	Module.tacked.delete(context);
+	const parsed = {status, buffer, context};
 	Module.tacked.add(parsed);
+	Module.tacked.delete(context);
 	return Module.targets.add(parsed);
 });
 
@@ -110,6 +113,7 @@ php_stream *php_stream_fetch_open(
 
 	zval *tmpzval;
 	long contextId = 0;
+	long ignoreErrors = false;
 	if(context)
 	{
 		contextId = EM_ASM_INT({
@@ -117,8 +121,6 @@ php_stream *php_stream_fetch_open(
 			Module.tacked.add(context);
 			return Module.targets.add(context);
 		});
-
-		// if((tmpzval = php_stream_context_get_option(context, "http", "ignore_errors")) != NULL) {}
 
 		if((tmpzval = php_stream_context_get_option(context, "http", "method")) != NULL)
 		{
@@ -184,6 +186,16 @@ php_stream *php_stream_fetch_open(
 				context.body = Module.HEAPU8.slice($1, $1 + $2);
 			})() }, contextId, Z_STRVAL_P(tmpzval), Z_STRLEN_P(tmpzval));
 		}
+
+		if((tmpzval = php_stream_context_get_option(context, "http", "ignore_errors")) != NULL)
+		{
+			ignoreErrors = zend_is_true(tmpzval);
+
+			EM_ASM({ {
+				const context = Module.targets.get($0);
+				context.ignoreErrors = $1;
+			} }, contextId, ignoreErrors);
+		}
 	}
 
 	php_stream_fetch_data *self;
@@ -195,6 +207,25 @@ php_stream *php_stream_fetch_open(
 	self = emalloc(sizeof(*self));
 	self->fpos = 0;
 	self->targetId = php_stream_fetch_real_open(path, contextId, sizeof(char*), &headersv, &headersc);
+
+	php_stream_notify_info(context, PHP_STREAM_NOTIFY_CONNECT, NULL, 0);
+
+	if(!ignoreErrors)
+	{
+		long status = EM_ASM_INT({ {
+			const {status} = Module.targets.get($0);
+			return status;
+		} }, self->targetId);
+
+		if(status == 403)
+		{
+			php_stream_notify_error(context, PHP_STREAM_NOTIFY_AUTH_RESULT, "HTTP 403 Auth Error!", status);
+		}
+		else if(status >= 400)
+		{
+			php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "HTTP 4XX Error!", status);
+		}
+	}
 
 	zval *response_header = NULL;
 	array_init(response_header);
