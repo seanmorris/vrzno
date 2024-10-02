@@ -14,7 +14,7 @@ VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense.
 * [Javascript Object and Classes](#javascript-object-and-classes)
 * [Callbacks](#callbacks)
 * [Arrays](#arrays)
-* [toString & __toString](#toString-&amp;-__toString)
+* [toString & __toString](#tostring--__tostring)
 * [URL fopen](#url-fopen)
 * [Limitations](#limitations)
 
