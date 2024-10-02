@@ -3,35 +3,39 @@ typedef struct {
 	size_t fpos;
 } php_stream_fetch_data;
 
-EM_ASYNC_JS(ssize_t, php_stream_fetch_real_read, (char* buf, size_t count, size_t fpos, jstarget *targetId), {
-	const {buffer, status, context} = Module.targets.get(targetId);
-
-	if(status >= 400 && !context.ignoreErrors)
-	{
-		return 0;
-	}
-
-	if(fpos >= buffer.length)
-	{
-		count = 0;
-	}
-	else if(fpos + count > buffer.length)
-	{
-		count = buffer.length - fpos;
-	}
-
-	if(count)
-	{
-		Module.HEAPU8.set(buffer.slice(fpos, fpos + count), buf);
-	}
-
-	return count;
-});
-
 static ssize_t php_stream_fetch_read(php_stream *stream, char *buf, size_t count)
 {
 	php_stream_fetch_data *self = (php_stream_fetch_data*)stream->abstract;
-	ssize_t read = php_stream_fetch_real_read(buf, count, self->fpos, self->targetId);
+
+	ssize_t read = EM_ASM_PTR({
+		const target = Module.targets.get($0);
+		const dest = $1;
+		const fpos = $2;
+		let count = $3;
+
+		if(target.status >= 400 && !target.context.ignoreErrors)
+		{
+			return 0;
+		}
+
+		if(fpos >= target.buffer.length)
+		{
+			count = 0;
+		}
+		else if(fpos + count > target.buffer.length)
+		{
+			count = target.buffer.length - fpos;
+		}
+
+		if(count)
+		{
+			Module.HEAPU8.set(target.buffer.slice(fpos, fpos + count), dest);
+		}
+
+		return count;
+
+	}, self->targetId, buf, self->fpos, count);
+
 	self->fpos += read;
 	stream->eof = read ? 0 : 1;
 	return read;

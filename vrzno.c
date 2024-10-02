@@ -117,7 +117,7 @@ PHP_MINIT_FUNCTION(vrzno)
 		Module.bufferMaps = new WeakMap;
 
 		const getRegistry = weakerMap => {
-			const registry = new FinalizationRegistry(key => {
+			const registry = new FinReg(key => {
 				if(weakerMap.registry !== registry)
 				{
 					return;
