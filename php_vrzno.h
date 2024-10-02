@@ -33,15 +33,12 @@ PHP_FUNCTION(vrzno_import);
 PHP_FUNCTION(vrzno_target);
 PHP_FUNCTION(vrzno_zval);
 
-// PHP_METHOD(Vrzno, addeventlistener);
-// PHP_METHOD(Vrzno, removeeventlistener);
-// PHP_METHOD(Vrzno, queryselector);
 PHP_METHOD(Vrzno, __invoke);
 PHP_METHOD(Vrzno, __call);
 PHP_METHOD(Vrzno, __get);
-// PHP_METHOD(Vrzno, __set);
 PHP_METHOD(Vrzno, __construct);
 PHP_METHOD(Vrzno, __destruct);
+PHP_METHOD(Vrzno, __toString);
 
 static zend_object_iterator *vrzno_array_get_iterator(zend_class_entry *ce, zval *zv, int by_ref);
 

@@ -8,7 +8,7 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_refcount(zval *zv)
 	Z_DELREF_P(zv);
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_zrefcount(zval *zv)
+uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_zrefcount(zval *zv)
 {
 	return Z_REFCOUNT_P(zv);
 }
@@ -180,17 +180,17 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_dump(zval* zv, int depth)
 	php_debug_zval_dump(zv, depth);
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_type(zval *zv)
+uint8_t EMSCRIPTEN_KEEPALIVE vrzno_expose_type(zval *zv)
 {
 	return Z_TYPE_P(zv);
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_array_length(zval *zv)
+uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_array_length(zval *zv)
 {
 	return zend_hash_num_elements(Z_ARRVAL_P(zv));
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zval *zv)
+long EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zval *zv)
 {
 	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv) == vrzno_class_entry)
 	{
@@ -205,7 +205,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zval *zv)
 	return NULL;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
+zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
 {
 	zend_fcall_info_cache fcc;
 	char *errstr = NULL;
@@ -250,4 +250,12 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_key_pointer(zval *zv, char *key)
 	zval *rv = zend_hash_find(Z_ARRVAL_P(zv), zKey);
 	zend_string_release(zKey);
 	return rv;
+}
+
+zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_pointer(zval *zv, char *method)
+{
+	zend_string *zMethod = zend_string_init(method, strlen(method), 0);
+	zend_function *zf = zend_std_get_method(&Z_OBJ_P(zv), zMethod, 0);
+	zend_string_release(zMethod);
+	return zf;
 }

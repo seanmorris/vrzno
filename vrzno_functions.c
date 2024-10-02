@@ -147,8 +147,8 @@ PHP_FUNCTION(vrzno_timeout)
 			Module.ccall(
 				'vrzno_exec_callback'
 				, 'number'
-				, ['number','number','number']
-				, [funcPtr, null, 0]
+				, ['number','number','number','number']
+				, [funcPtr, null, 0, 0]
 			);
 
 			Module.ccall(

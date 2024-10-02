@@ -386,6 +386,26 @@ PHP_MINIT_FUNCTION(vrzno)
 						// console.log('Freg %s, %d', 'a', zv);
 						return iterator;
 					}
+
+					if(prop === Symbol.toPrimitive)
+					{
+						const method = '__toString';
+						const len = lengthBytesUTF8(method) + 1;
+						const loc = _malloc(len);
+						stringToUTF8(method, loc, len);
+
+						const methodPtr = Module.ccall(
+							'vrzno_expose_method_pointer'
+							, 'number'
+							, ['number', 'number']
+							, [zv, loc]
+						);
+
+						_free(loc);
+
+						return () => Module.callableToJs(methodPtr, zv)();
+					}
+
 					switch(typeof prop)
 					{
 						case 'number':
@@ -400,16 +420,28 @@ PHP_MINIT_FUNCTION(vrzno)
 						case 'string':
 							prop = String(prop);
 							const len = lengthBytesUTF8(prop) + 1;
-							const namePtr = _malloc(len);
-							stringToUTF8(prop, namePtr, len);
+							const loc = _malloc(len);
+							stringToUTF8(prop, loc, len);
 
 							if(type === IS_OBJECT)
 							{
+								const methodPtr = Module.ccall(
+									'vrzno_expose_method_pointer'
+									, 'number'
+									, ['number', 'number']
+									, [zv, loc]
+								);
+
+								if(methodPtr)
+								{
+									return Module.callableToJs(methodPtr, zv);
+								}
+
 								retPtr = Module.ccall(
 									'vrzno_expose_property_pointer'
 									, 'number'
 									, ['number', 'number']
-									, [zv, namePtr]
+									, [zv, loc]
 								);
 							}
 							else if(type === IS_ARRAY)
@@ -418,11 +450,11 @@ PHP_MINIT_FUNCTION(vrzno)
 									'vrzno_expose_key_pointer'
 									, 'number'
 									, ['number', 'number']
-									, [zv, namePtr]
+									, [zv, loc]
 								);
 							}
 
-							_free(namePtr);
+							_free(loc);
 
 							break;
 
@@ -503,7 +535,7 @@ PHP_MINIT_FUNCTION(vrzno)
 			return proxy;
 		});
 
-		Module.callableToJs = Module.callableToJs || ((funcPtr) => {
+		Module.callableToJs = Module.callableToJs || ((funcPtr, objPtr = null) => {
 			if(Module.callables.has(funcPtr))
 			{
 				return Module.callables.get(funcPtr);
@@ -530,8 +562,8 @@ PHP_MINIT_FUNCTION(vrzno)
 				const zv = Module.ccall(
 					'vrzno_exec_callback'
 					, 'number'
-					, ['number','number','number']
-					, [funcPtr, paramsPtr, args.length]
+					, ['number','number','number','number']
+					, [funcPtr, paramsPtr, args.length, objPtr]
 				);
 
 				if(args.length)
@@ -751,6 +783,8 @@ PHP_MINIT_FUNCTION(vrzno)
 					, [index, isFunction, isConstructor, rv]
 				);
 
+				Module.tacked.add(value);
+
 				Module.ccall(
 					'vrzno_expose_inc_refcount'
 					, 'number'
@@ -942,25 +976,24 @@ ZEND_TSRMLS_CACHE_DEFINE()
 ZEND_GET_MODULE(vrzno)
 #endif
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *fptr, zval **argv, int argc)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval **argv, int argc, zval *obj)
 {
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
-
 	zval params[argc];
 
 	fci.size             = sizeof(fci);
 	ZVAL_UNDEF(&fci.function_name);
-	fci.object           = NULL;
+	fci.object           = Z_OBJ_P(obj);
 	fci.retval           = (zval*) emalloc(sizeof(zval)); // @todo: Figure out when to clear this...
 	fci.params           = params;
 	fci.named_params     = 0;
 	fci.param_count      = argc;
 
-	fcc.function_handler = fptr;
+	fcc.function_handler = func;
 	fcc.calling_scope    = NULL;
 	fcc.called_scope     = NULL;
-	fcc.object           = NULL;
+	fcc.object           = Z_OBJ_P(obj);
 
 	if(argc)
 	{
