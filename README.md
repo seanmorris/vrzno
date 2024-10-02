@@ -187,3 +187,5 @@ https://www.php.net/manual/en/context.http.php
   Currently, when a PHP object is passed into a Javascript execution environment, method names take precedence over property names. This means if a PHP object has both a method `$x->y()`, and a property `$x->y`, then the property will be inacessible from Javascript.
 
 * PHP Classes are not **yet** accessible from Javascript. I.e. there is no way to pass a class out of PHP and call `new` on it from Javascript.
+
+* Static methods are not yet proxied.
