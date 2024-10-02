@@ -1,11 +1,7 @@
 # What is VRZNO?
 (/vərəˈzɑːnoʊ/ | vər-ə-ZAH-noh )
 
-VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense.
-
-* VRZNO lets you call javascript code from PHP.
-* VRZNO is a statically compiled PHP module.
-* VRZNO runs in-browser, nodeJS and cloudflare.
+VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense. It lets you pass objects, arrays, callbacks, and classes between PHP & Javascript, as well as scalar values.
 
 ## Contents
 
@@ -26,7 +22,7 @@ https://github.com/seanmorris/php-wasm
 ![](https://github.com/seanmorris/vrzno/blob/master/banner.jpg?raw=true)
 
 ### new Vrzno
-Creates a new `Vrzno` object that holds a reference to Javascript's `globalThis` object. In the browser this coresponds to `window`.
+Creates a new `Vrzno` object that holds a reference to Javascript's `globalThis` object. In the browser this corresponds to `window`.
 
 ```php
 <?php
@@ -47,7 +43,7 @@ var_dump($json);
 ```
 
 ### `vrzno_import($module_url)`
-Import a javascript library asyncronously. This is the PHP equivalent of Javascript's dynamic `import()`.
+Import a javascript library asynchronously. This is the PHP equivalent of Javascript's dynamic `import()`.
 
 See a demo: https://codepen.io/SeanMorris227/pen/LYqNNrE
 
@@ -110,9 +106,9 @@ var_dump($d, $d->toISOString());
 
 ## Callbacks
 
-Functions are fully marshalled as well. In thie example, we'll create an anonymous PHP callback that calls the Javascript function `window.alert()`, and then pass the PHP callback to Javascript's `setTimeout()` function, which will call it after 1 second.
+Functions are fully marshalled as well. In this example, we'll create an anonymous PHP callback that calls the Javascript function `window.alert()`, and then pass the PHP callback to Javascript's `setTimeout()` function, which will call it after 1 second.
 
-As you can see, functions from **both** lnaguages are crossing the boundary here:
+As you can see, functions from **both** languages are crossing the boundary here:
 
 
 ```php
@@ -142,11 +138,11 @@ Both string and integer properties are fully marshalled for both PHP and JS arra
 
 ## toString & __toString
 
-The Javascript `.toString` method and the PHP `->__toString` method are proxied to eachother to ensure proper stringification in both languages.
+The Javascript `.toString` method and the PHP `->__toString` method are proxied to each other to ensure proper stringification in both languages.
 
 ## URL fopen
 
-Vrzno implements a fetch-backend for the `http` and `https` stream wrappers, which repsects the `allow_url_fopen` ini directive.
+Vrzno implements a fetch-backend for the `http` and `https` stream wrappers, which respects the `allow_url_fopen` ini directive.
 
 ```php
 <?php
@@ -184,7 +180,7 @@ https://www.php.net/manual/en/context.http.php
 
 * The Javascript object model places properties and methods in the same namespace. PHP however uses separate namespaces for properties and methods. This means an object in PHP can have a property `$x->y` as well as a method `$x->y()`. However if a Javascript object has a method `x.y()`, then the property `x.y` must resolve to the same callback as the method.
 
-  Currently, when a PHP object is passed into a Javascript execution environment, method names take precedence over property names. This means if a PHP object has both a method `$x->y()`, and a property `$x->y`, then the property will be inacessible from Javascript.
+  Currently, when a PHP object is passed into a Javascript execution environment, method names take precedence over property names. This means if a PHP object has both a method `$x->y()`, and a property `$x->y`, then the property will be inaccessible from Javascript.
 
 * PHP Classes are not **yet** accessible from Javascript. I.e. there is no way to pass a class out of PHP and call `new` on it from Javascript.
 
