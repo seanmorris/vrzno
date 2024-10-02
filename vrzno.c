@@ -949,9 +949,11 @@ PHP_MINFO_FUNCTION(vrzno)
 
 	if (!sapi_module.phpinfo_as_text) {
 		php_info_print_box_start(0);
-		PUTS("<a href=\"https://github.com/seanmorris/php-wasm\">");
+		PUTS("Find <a target = \"_blank\" href=\"https://github.com/seanmorris/php-wasm\">php-wasm</a>");
+		PUTS(" & <a target = \"_blank\" href=\"https://github.com/seanmorris/vrzno\">vrzno</a> on github!");
+		PUTS("<a target = \"_blank\" href=\"https://github.com/seanmorris/php-wasm\">");
 		PUTS("<img border=\"0\" src=\"");
-		PUTS(VRZNO_ICON_DATA_URI "\" alt=\"Zend logo\" /></a>\n");
+		PUTS(VRZNO_ICON_DATA_URI "\" alt=\"Sean logo\" /></a>\n");
 		php_info_print_box_end();
 	}
 }
