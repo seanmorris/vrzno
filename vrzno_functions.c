@@ -58,13 +58,13 @@ PHP_FUNCTION(vrzno_eval)
 	ZEND_PARSE_PARAMETERS_END();
 
 	char *js_ret = EM_ASM_INT({
-		const jsRet  = String(eval(UTF8ToString($0)));
-		const len    = lengthBytesUTF8(jsRet) + 1;
-		const strLoc = _malloc(len);
+		const str = String(eval(UTF8ToString($0)));
+		const len = lengthBytesUTF8(str) + 1;
+		const loc = _malloc(len);
 
-		stringToUTF8(jsRet, strLoc, len);
+		stringToUTF8(str, loc, len);
 
-		return strLoc;
+		return loc;
 
 	}, js_code);
 
@@ -106,16 +106,16 @@ PHP_FUNCTION(vrzno_run)
 		const funcName = UTF8ToString($0);
 		const argJson  = UTF8ToString($1);
 
-		const func     = globalThis[funcName];
-		const args     = JSON.parse(argJson || '[]') || [];
+		const func = globalThis[funcName];
+		const args = JSON.parse(argJson || '[]') || [];
 
-		const jsRet    = String(func(...args));
-		const len      = lengthBytesUTF8(jsRet) + 1;
-		const strLoc   = _malloc(len);
+		const str = String(func(...args));
+		const len = lengthBytesUTF8(str) + 1;
+		const loc = _malloc(len);
 
-		stringToUTF8(jsRet, strLoc, len);
+		stringToUTF8(str, loc, len);
 
-		return strLoc;
+		return loc;
 
 	}, js_funcname, js_args);
 
@@ -165,7 +165,7 @@ PHP_FUNCTION(vrzno_timeout)
 	GC_ADDREF(ZEND_CLOSURE_OBJECT(fcc.function_handler));
 }
 
-EM_ASYNC_JS(void, vrzno_await_internal, (long targetId, zval *rv), {
+EM_ASYNC_JS(void, vrzno_await_internal, (jstarget *targetId, zval *rv), {
 	const target = Module.targets.get(targetId);
 	const result = await target;
 	Module.jsToZval(result, rv);

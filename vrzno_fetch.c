@@ -1,9 +1,9 @@
 typedef struct {
-	long targetId;
+	jstarget* targetId;
 	size_t fpos;
 } php_stream_fetch_data;
 
-EM_ASYNC_JS(ssize_t, php_stream_fetch_real_read, (char* buf, size_t count, size_t fpos, long targetId), {
+EM_ASYNC_JS(ssize_t, php_stream_fetch_real_read, (char* buf, size_t count, size_t fpos, jstarget *targetId), {
 	const {buffer, status, context} = Module.targets.get(targetId);
 
 	if(status >= 400 && !context.ignoreErrors)
@@ -47,6 +47,7 @@ static int php_stream_fetch_close(php_stream *stream, int close_handle)
 	}, self->targetId);
 
 	efree(self);
+
 	return 0;
 }
 
@@ -64,13 +65,13 @@ const php_stream_ops php_stream_fetch_io_ops = {
 
 EM_ASYNC_JS(ssize_t, php_stream_fetch_real_open, (
 	const char *path,
-	long contextId,
+	jstarget *_context,
 	size_t ptrsize,
 	char ***headersv,
-	long *headersc
+	size_t *headersc
 ), {
 	const pathString = UTF8ToString(path);
-	const context = Module.targets.get(contextId) || {};
+	const context = Module.targets.get(_context) || {};
 	const response = await fetch(pathString, context);
 	const buffer = new Uint8Array( await response.arrayBuffer() );
 	const status = response.status;
@@ -112,8 +113,8 @@ php_stream *php_stream_fetch_open(
 	}
 
 	zval *tmpzval;
-	long contextId = 0;
-	long ignoreErrors = false;
+	jstarget *contextId = NULL;
+	bool ignoreErrors = false;
 	if(context)
 	{
 		contextId = EM_ASM_INT({
@@ -130,7 +131,7 @@ php_stream *php_stream_fetch_open(
 
 				context.method = method;
 
-			} }, contextId, Z_STRVAL_P(tmpzval));
+			} }, context, Z_STRVAL_P(tmpzval));
 		}
 
 		if((tmpzval = php_stream_context_get_option(context, "http", "header")) != NULL)
@@ -202,17 +203,17 @@ php_stream *php_stream_fetch_open(
 	php_stream *stream = NULL;
 
 	char **headersv;
-	long headersc;
+	size_t headersc;
 
 	self = emalloc(sizeof(*self));
 	self->fpos = 0;
-	self->targetId = php_stream_fetch_real_open(path, contextId, sizeof(char*), &headersv, &headersc);
+	self->targetId = php_stream_fetch_real_open(path, context, sizeof(char*), &headersv, &headersc);
 
 	php_stream_notify_info(context, PHP_STREAM_NOTIFY_CONNECT, NULL, 0);
 
 	if(!ignoreErrors)
 	{
-		long status = EM_ASM_INT({ {
+		int status = EM_ASM_INT({ {
 			const {status} = Module.targets.get($0);
 			return status;
 		} }, self->targetId);

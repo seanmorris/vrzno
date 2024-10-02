@@ -597,7 +597,7 @@ PHP_MINIT_FUNCTION(vrzno)
 				}
 			};
 
-			Object.defineProperty(wrapped, 'name', {value: `PHP_@{${funcPtr}}`});
+			Object.defineProperty(wrapped, 'name', {value: `PHP_@{0x${funcPtr.toString(16)}}`});
 
 			Module.ccall(
 				'vrzno_expose_inc_crefcount'
@@ -818,19 +818,19 @@ PHP_MINIT_FUNCTION(vrzno)
 			}
 			else if(typeof value === "string") // Generate string zval
 			{
-				const len      = lengthBytesUTF8(value) + 1;
-				const strLoc   = _malloc(len);
+				const len = lengthBytesUTF8(value) + 1;
+				const loc = _malloc(len);
 
-				stringToUTF8(value, strLoc, len);
+				stringToUTF8(value, loc, len);
 
 				Module.ccall(
 					'vrzno_expose_create_string'
 					, 'number'
 					, ['number', 'number']
-					, [strLoc, rv]
+					, [loc, rv]
 				);
 
-				_free(strLoc);
+				_free(loc);
 			}
 		});
 

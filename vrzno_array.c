@@ -9,14 +9,14 @@ static void vrzno_array_it_dtor(zend_object_iterator *iter)
 	zval_ptr_dtor(&iter->data);
 }
 
-static int vrzno_array_it_valid(zend_object_iterator *it)
+static zend_result vrzno_array_it_valid(zend_object_iterator *it)
 {
 	vrzno_array_iterator *iter = (vrzno_array_iterator*)it;
 
 	zend_object  *object = Z_OBJ(it->data);
 	vrzno_object *vrzno  = vrzno_fetch_object(object);
 
-	long valid = (long) EM_ASM_INT({
+	int valid = EM_ASM_INT({
 		let target = Module.targets.get($0);
 		const property = $1;
 

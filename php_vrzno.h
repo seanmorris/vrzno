@@ -14,11 +14,15 @@ ZEND_TSRMLS_CACHE_EXTERN()
 
 #include <stdbool.h>
 
+// Used as `jstarget *`, but aren't actually pointers.
+// Actually "points" to an object in Module.targets.
+# define jstarget void
+
 typedef struct {
 	zend_object zo;
 	long isFunction;
 	bool isConstructor;
-	long targetId;
+	jstarget *targetId;
 } vrzno_object;
 
 vrzno_object* vrzno_fetch_object(zend_object *obj);
@@ -33,9 +37,9 @@ PHP_FUNCTION(vrzno_import);
 PHP_FUNCTION(vrzno_target);
 PHP_FUNCTION(vrzno_zval);
 
-PHP_METHOD(Vrzno, __invoke);
-PHP_METHOD(Vrzno, __call);
 PHP_METHOD(Vrzno, __get);
+PHP_METHOD(Vrzno, __call);
+PHP_METHOD(Vrzno, __invoke);
 PHP_METHOD(Vrzno, __construct);
 PHP_METHOD(Vrzno, __destruct);
 PHP_METHOD(Vrzno, __toString);

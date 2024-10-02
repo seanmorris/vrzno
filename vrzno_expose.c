@@ -33,7 +33,7 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(void *ptr)
 	efree(ptr);
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(long value, zval *rv)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_bool(int value, zval *rv)
 {
 	if(value)
 	{
@@ -70,9 +70,9 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value, zval* rv)
 	ZVAL_STRING(rv, value);
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(int target_id, int isFunction, int isConstructor, zval *rv)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(jstarget *targetId, jstarget *isFunction, int isConstructor, zval *rv)
 {
-	vrzno_object *vObj = vrzno_create_object_for_target(target_id, isFunction, isConstructor);
+	vrzno_object *vObj = vrzno_create_object_for_target(targetId, isFunction, isConstructor);
 	ZVAL_OBJ(rv, &vObj->zo);
 }
 
@@ -190,7 +190,7 @@ uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_array_length(zval *zv)
 	return zend_hash_num_elements(Z_ARRVAL_P(zv));
 }
 
-long EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zval *zv)
+jstarget* EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zval *zv)
 {
 	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv) == vrzno_class_entry)
 	{
