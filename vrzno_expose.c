@@ -232,6 +232,13 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_string(zval *zv)
 {
 	return Z_STRVAL_P(zv);
 }
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_key_pointer(zval *zv, char *key)
+{
+	zend_string *zKey = zend_string_init(key, strlen(key), 0);
+	zval *rv = zend_hash_find(Z_ARRVAL_P(zv), zKey);
+	zend_string_release(zKey);
+	return rv;
+}
 
 zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_property_pointer(zval *zv, char *name)
 {
@@ -241,16 +248,16 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_property_pointer(zval *zv, char *name)
 
 zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zval *zv, unsigned offset)
 {
+	if(Z_TYPE_P(zv) == IS_OBJECT)
+	{
+		char prop[2 + (!offset ? 1 : (int)log10(abs(offset)))];
+		sprintf(prop, "%d", offset);
+		return vrzno_expose_property_pointer(zv, prop);
+	}
+
 	return zend_hash_index_find(Z_ARRVAL_P(zv), offset);
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_key_pointer(zval *zv, char *key)
-{
-	zend_string *zKey = zend_string_init(key, strlen(key), 0);
-	zval *rv = zend_hash_find(Z_ARRVAL_P(zv), zKey);
-	zend_string_release(zKey);
-	return rv;
-}
 
 zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_pointer(zval *zv, char *method)
 {
