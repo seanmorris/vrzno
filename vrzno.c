@@ -351,7 +351,7 @@ PHP_MINIT_FUNCTION(vrzno)
 				},
 				get: (target, prop) => {
 					let retPtr;
-					if(prop === Symbol.iterator)
+					if(type === IS_ARRAY && prop === Symbol.iterator)
 					{
 						const max = Module.ccall(
 							'vrzno_expose_array_length'
