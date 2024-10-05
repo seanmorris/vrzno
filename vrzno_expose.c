@@ -250,7 +250,7 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zval *zv, unsigned off
 {
 	if(Z_TYPE_P(zv) == IS_OBJECT)
 	{
-		char prop[2 + (!offset ? 1 : (int)log10(abs(offset)))];
+		char prop[2 + (!offset ? 1 : (int)log10(offset))];
 		sprintf(prop, "%d", offset);
 		return vrzno_expose_property_pointer(zv, prop);
 	}

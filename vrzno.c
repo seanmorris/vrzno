@@ -984,9 +984,9 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval **argv,
 	zend_fcall_info_cache fcc;
 	zval params[argc];
 
-	fci.size             = sizeof(fci);
+	fci.size = sizeof(fci);
 	ZVAL_UNDEF(&fci.function_name);
-	fci.object           = Z_OBJ_P(obj);
+
 	fci.retval           = (zval*) emalloc(sizeof(zval)); // @todo: Figure out when to clear this...
 	fci.params           = params;
 	fci.named_params     = 0;
@@ -995,7 +995,15 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval **argv,
 	fcc.function_handler = func;
 	fcc.calling_scope    = NULL;
 	fcc.called_scope     = NULL;
-	fcc.object           = Z_OBJ_P(obj);
+
+	fci.object = NULL;
+	fcc.object = NULL;
+
+	if(obj)
+	{
+		fci.object = Z_OBJ_P(obj);
+		fcc.object = Z_OBJ_P(obj);
+	}
 
 	if(argc)
 	{
