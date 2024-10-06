@@ -645,7 +645,7 @@ PHP_METHOD(Vrzno, __call)
 		{
 			const loc = argp + i * size;
 			const ptr = Module.getValue(loc, '*');
-			const arg = Module.zvalToJS(ptr); // Clean up the above when the object in `arg` is GCed?
+			const arg = Module.zvalToJS(ptr); // Clean up the above when the object in `arg` is jsGCed?
 			args.push(arg);
 		}
 
@@ -692,7 +692,7 @@ PHP_METHOD(Vrzno, __invoke)
 
 		for(let i = 0; i < argc; i++)
 		{
-			args.push(Module.zvalToJS(argv + i * size)); // Clean up the above when the intermediate object is GCed?
+			args.push(Module.zvalToJS(argv + i * size)); // Clean up the above when the intermediate object is jsGCed?
 		}
 
 		return Module.jsToZval(target(...args), rv);
