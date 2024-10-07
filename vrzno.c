@@ -351,29 +351,60 @@ PHP_MINIT_FUNCTION(vrzno)
 				},
 				get: (target, prop) => {
 					let retPtr;
-					if(type === IS_ARRAY && prop === Symbol.iterator)
+					if(prop === Symbol.iterator)
 					{
-						const max = Module.ccall(
-							'vrzno_expose_array_length'
-							, 'number'
-							, ['number']
-							, [zv]
-						);
+						let iterator;
+						if(type === IS_ARRAY)
+						{
+							const max = Module.ccall(
+								'vrzno_expose_array_length'
+								, 'number'
+								, ['number']
+								, [zv]
+							);
 
-						const iterator = () => {
-							let current = -1;
-							return {
-								next() {
-									const done = ++current >= max;
-									return {done, value: Module.zvalToJS(Module.ccall(
-										'vrzno_expose_dimension_pointer'
-										, 'number'
-										, ['number', 'number']
-										, [zv, current]
-									))};
+							iterator = () => {
+								let current = -1;
+								return {
+									next() {
+										const done = ++current >= max;
+										return {done, value: Module.zvalToJS(Module.ccall(
+											'vrzno_expose_dimension_pointer'
+											, 'number'
+											, ['number', 'number']
+											, [zv, current]
+										))};
+									}
 								}
-							}
-						};
+							};
+						}
+						else if(type === IS_OBJECT)
+						{
+							const keysLoc = Module.ccall(
+								'vrzno_expose_object_keys'
+								, 'number'
+								, ['number']
+								, [zv]
+							);
+							const keyJson = UTF8ToString(keysLoc);
+							const keys = JSON.parse(keyJson);
+							_free(keysLoc);
+
+							iterator = () => {
+								let current = -1;
+								return {
+									next() {
+										const done = ++current >= keys.length;
+										return {done, value: [keys[current], Module.zvalToJS(Module.ccall(
+											'vrzno_expose_property_pointer'
+											, 'number'
+											, ['number', 'string']
+											, [zv, keys[current]]
+										))]};
+									}
+								}
+							};
+						}
 
 						Module.ccall(
 							'vrzno_expose_inc_refcount'

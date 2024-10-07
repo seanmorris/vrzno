@@ -258,7 +258,6 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zval *zv, unsigned off
 	return zend_hash_index_find(Z_ARRVAL_P(zv), offset);
 }
 
-
 zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_pointer(zval *zv, char *method)
 {
 	zend_string *zMethod = zend_string_init(method, strlen(method), 0);
