@@ -32,7 +32,8 @@ static const zend_function_entry vrzno_vrzno_methods[] = {
 	PHP_FE_END
 };
 
-vrzno_object *vrzno_fetch_object(zend_object *obj) {
+vrzno_object *vrzno_fetch_object(zend_object *obj)
+{
 	return (vrzno_object*)((char*)(obj) - XtOffsetOf(vrzno_object, zo));
 }
 
@@ -186,10 +187,10 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 			target[property] = Module.callableToJs(funcPtr);
 
 			const gc = Module.ccall(
-				'vrzno_expose_array'
+				'vrzno_expose_closure'
 				, 'number'
 				, ['number']
-				, [zvalPtr]
+				, [funcPtr]
 			);
 
 			Module.fRegistry.register(target[property], gc, target[property]);
@@ -361,10 +362,10 @@ void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 			target[property] = Module.callableToJs(funcPtr);
 
 			const gc = Module.ccall(
-				'vrzno_expose_array'
+				'vrzno_expose_closure'
 				, 'number'
 				, ['number']
-				, [zvalPtr]
+				, [funcPtr]
 			);
 
 			Module.fRegistry.register(target[property], gc, target[property]);
@@ -653,7 +654,6 @@ PHP_METHOD(Vrzno, __call)
 #else
 		ZEND_HASH_FOREACH_VAL(argv, arg) {
 #endif
-			Z_TRY_ADDREF_P(arg);
 			args[i] = arg;
 			i++;
 		} ZEND_HASH_FOREACH_END();
@@ -694,15 +694,6 @@ PHP_METHOD(Vrzno, __invoke)
 	ZEND_PARSE_PARAMETERS_START(0, -1)
 		Z_PARAM_VARIADIC('*', argv, argc)
 	ZEND_PARSE_PARAMETERS_END();
-
-	if(argc)
-	{
-		int i = 0;
-		for(i = 0; i < argc; i++)
-		{
-			Z_TRY_ADDREF(argv[i]);
-		}
-	}
 
 	EM_ASM({
 		const target = Module.targets.get($0);

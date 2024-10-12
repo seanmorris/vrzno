@@ -39,11 +39,6 @@
 #include "vrzno_fetch.c"
 #include "vrzno_functions.c"
 
-PHP_RINIT_FUNCTION(vrzno)
-{
-	return SUCCESS;
-}
-
 PHP_RSHUTDOWN_FUNCTION(vrzno)
 {
 	EM_ASM({
@@ -69,11 +64,9 @@ PHP_MINIT_FUNCTION(vrzno)
 
 	vrzno_class_entry->create_object = vrzno_create_object;
 	vrzno_class_entry->get_iterator  = vrzno_array_get_iterator;
-#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
-	vrzno_class_entry->ce_flags     |= ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES;
-#endif
 
 #if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
+	vrzno_class_entry->ce_flags |= ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES;
 	zend_string *attribute_name_AllowDynamicProperties_class_vrzno = zend_string_init_interned("AllowDynamicProperties", sizeof("AllowDynamicProperties") - 1, 1);
 	zend_add_class_attribute(vrzno_class_entry, attribute_name_AllowDynamicProperties_class_vrzno, 0);
 	zend_string_release(attribute_name_AllowDynamicProperties_class_vrzno);
@@ -96,6 +89,20 @@ PHP_MINIT_FUNCTION(vrzno)
 	php_register_url_stream_wrapper("http", &php_stream_fetch_wrapper);
 	php_register_url_stream_wrapper("https", &php_stream_fetch_wrapper);
 
+#if defined(ZTS) && defined(COMPILE_DL_VRZNO)
+	ZEND_TSRMLS_CACHE_UPDATE();
+#endif
+
+	EM_ASM({
+		Module.hasVrzno = true;
+	});
+
+	// return php_pdo_register_driver(&pdo_vrzno_driver);
+	return SUCCESS;
+}
+
+PHP_RINIT_FUNCTION(vrzno)
+{
 	EM_ASM({
 		const IS_UNDEF  = 0;
 		const IS_NULL   = 1;
@@ -107,7 +114,6 @@ PHP_MINIT_FUNCTION(vrzno)
 		const IS_ARRAY  = 7;
 		const IS_OBJECT = 8;
 
-		Module.hasVrzno = true;
 		Module.tacked = new Set;
 
 		const _FinalizationRegistry = globalThis.FinalizationRegistry || class { // Polyfill for cloudflare
@@ -118,7 +124,15 @@ PHP_MINIT_FUNCTION(vrzno)
 		const FinalizationRegistryWrapper = class {
 			constructor(callback)
 			{
-				this.registry = new _FinalizationRegistry(callback);
+				this.registry = new _FinalizationRegistry(gc => {
+					// console.log('Garbage collecting @ ' + gc);
+					Module.ccall(
+						'vrzno_expose_dec_refcount'
+						, 'number'
+						, ['number']
+						, [gc]
+					);
+				});
 			}
 
 			register(target, gc, unregisterToken)
@@ -153,20 +167,12 @@ PHP_MINIT_FUNCTION(vrzno)
 			}
 		};
 
-		const wRef = globalThis.WeakRef || class{ // Polyfill for cloudflare
+		const wRef = globalThis.WeakRef || class { // Polyfill for cloudflare
 			constructor(val){ this.val = val };
 			deref() { return this.val };
 		};
 
-		Module.fRegistry = Module.fRegistry || new FinalizationRegistryWrapper(gc => {
-			// console.log('Garbage collecting @ ' + gc);
-			Module.ccall(
-				'vrzno_expose_dec_refcount'
-				, 'number'
-				, ['number']
-				, [gc]
-			);
-		});
+		Module.fRegistry = new FinalizationRegistryWrapper();
 
 		Module.bufferMaps = new WeakMap;
 
@@ -325,8 +331,8 @@ PHP_MINIT_FUNCTION(vrzno)
 			}
 		});
 
-		Module.unregisterTokens = Module.unregisterTokens || new WeakMap;
-		Module.registered = Module.registered || new Module.WeakerMap;
+		Module.unregisterTokens = new WeakMap;
+		Module.registered = new Module.WeakerMap;
 
 		Module.marshalZObject = ((zo, type) => {
 			const nativeTargetId = Module.ccall(
@@ -448,7 +454,15 @@ PHP_MINIT_FUNCTION(vrzno)
 					if(methodPtr)
 					{
 						const wrapped = Module.callableToJs(methodPtr, zo);
-						Module.fRegistry.register(wrapped, zo, wrapped);
+
+						const gc = Module.ccall(
+							'vrzno_expose_closure'
+							, 'number'
+							, ['number']
+							, [methodPtr]
+						);
+
+						Module.fRegistry.register(wrapped, gc, wrapped);
 						return wrapped;
 					}
 
@@ -466,9 +480,7 @@ PHP_MINIT_FUNCTION(vrzno)
 						return;
 					}
 
-					const proxy = Module.zvalToJS(retPtr);
-
-					return proxy ?? Reflect.get(target, prop);
+					return Module.zvalToJS(retPtr) ?? Reflect.get(target, prop);
 				},
 
 				getOwnPropertyDescriptor: (target, prop) => {
@@ -670,7 +682,7 @@ PHP_MINIT_FUNCTION(vrzno)
 			return proxy;
 		});
 
-		Module.callableToJs = Module.callableToJs || ((funcPtr, zo = null) => {
+		Module.callableToJs = ((funcPtr, zo = null) => {
 			if(Module._callables.has(funcPtr))
 			{
 				return Module._callables.get(funcPtr);
@@ -756,25 +768,25 @@ PHP_MINIT_FUNCTION(vrzno)
 				return Module.targets.get(nativeTargetId);
 			}
 
-			const callable = Module.ccall(
+			const zf = Module.ccall(
 				'vrzno_expose_callable'
 				, 'number'
 				, ['number']
 				, [zv]
 			);
 
-			if(callable)
+			if(zf)
 			{
-				const wrapped = Module.callableToJs(callable);
+				const wrapped = Module.callableToJs(zf);
+
 				const gc = Module.ccall(
 					'vrzno_expose_closure'
 					, 'number'
 					, ['number']
-					, [zv]
+					, [zf]
 				);
 
 				Module.fRegistry.register(wrapped, gc, wrapped);
-				// console.log('Freg %s, %d', 'd', callable);
 
 				return wrapped;
 			}
@@ -1047,7 +1059,7 @@ PHP_MINIT_FUNCTION(vrzno)
 		Module.classes = new WeakMap();
 		Module._classes = new Module.WeakerMap();
 
-		Module.targets = Module.targets || new Module.UniqueIndex;
+		Module.targets = new Module.UniqueIndex;
 
 		Module.callables = new WeakMap();
 		Module._callables = new Module.WeakerMap();
@@ -1056,11 +1068,6 @@ PHP_MINIT_FUNCTION(vrzno)
 		Module.PdoParams = new WeakMap;
 	});
 
-#if defined(ZTS) && defined(COMPILE_DL_VRZNO)
-	ZEND_TSRMLS_CACHE_UPDATE();
-#endif
-
-	// return php_pdo_register_driver(&pdo_vrzno_driver);
 	return SUCCESS;
 }
 
