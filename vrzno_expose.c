@@ -18,21 +18,6 @@ uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_refcount(zend_refcounted *rc)
 	return GC_REFCOUNT(rc);
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_crefcount(zend_function *fptr)
-{
-	GC_ADDREF(ZEND_CLOSURE_OBJECT(fptr));
-}
-
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_crefcount(zend_function *fptr)
-{
-	int count = GC_REFCOUNT(ZEND_CLOSURE_OBJECT(fptr));
-
-	if(count)
-	{
-		GC_DELREF(ZEND_CLOSURE_OBJECT(fptr));
-	}
-}
-
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_efree(void *ptr)
 {
 	efree(ptr);
@@ -93,14 +78,9 @@ zval** EMSCRIPTEN_KEEPALIVE vrzno_expose_create_params(int argc)
 	return zvals;
 }
 
-char* EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
+char* EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zend_object* zo)
 {
-	if (Z_TYPE_P(zv) != IS_OBJECT)
-	{
-		return NULL;
-	}
-
-	HashTable *properties = Z_OBJPROP_P(zv);
+	HashTable *properties = zo->handlers->get_properties(zo);
 
 	if(!properties)
 	{
@@ -137,19 +117,14 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zval* zv)
 	return json;
 }
 
-char* EMSCRIPTEN_KEEPALIVE vrzno_expose_array_keys(zval *zv)
+char* EMSCRIPTEN_KEEPALIVE vrzno_expose_array_keys(zend_array *za)
 {
-	if (Z_TYPE_P(zv) != IS_ARRAY)
-	{
-		return NULL;
-	}
-
 	zval keys;
 	array_init(&keys);
 	zend_string *key;
 	zend_ulong	*index;
 
-	ZEND_HASH_FOREACH_KEY(Z_ARRVAL_P(zv), index, key) {
+	ZEND_HASH_FOREACH_KEY(za, index, key) {
 		if(key)
 		{
 			add_next_index_string(&keys, ZSTR_VAL(key));
@@ -190,21 +165,39 @@ uint8_t EMSCRIPTEN_KEEPALIVE vrzno_expose_type(zval *zv)
 	return Z_TYPE_P(zv);
 }
 
-uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_array_length(zval *zv)
+uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_array_length(zend_array *za)
 {
-	return zend_hash_num_elements(Z_ARRVAL_P(zv));
+	return zend_hash_num_elements(za);
 }
 
-jstarget* EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zval *zv)
+jstarget* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_target(zval *zv)
 {
-	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv) == vrzno_class_entry)
+	if(Z_TYPE_P(zv) != IS_OBJECT)
+	{
+		return NULL;
+	}
+
+	if(Z_OBJCE_P(zv) == vrzno_class_entry)
+	{
+		return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
+	}
+	else if(Z_OBJCE_P(zv)->parent == vrzno_class_entry)
 	{
 		return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
 	}
 
-	if(Z_TYPE_P(zv) == IS_OBJECT && Z_OBJCE_P(zv)->parent == vrzno_class_entry)
+	return NULL;
+}
+
+jstarget* EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zend_object *zo)
+{
+	if(zo->ce == vrzno_class_entry)
 	{
-		return vrzno_fetch_object(Z_OBJ_P(zv))->targetId;
+		return vrzno_fetch_object(zo)->targetId;
+	}
+	else if(zo->ce->parent == vrzno_class_entry)
+	{
+		return vrzno_fetch_object(zo)->targetId;
 	}
 
 	return NULL;
@@ -248,7 +241,7 @@ zend_array* EMSCRIPTEN_KEEPALIVE vrzno_expose_array(zval *zv)
 	return Z_ARR_P(zv);
 }
 
-zend_array* EMSCRIPTEN_KEEPALIVE vrzno_expose_closure(zval *zv)
+zend_object* EMSCRIPTEN_KEEPALIVE vrzno_expose_closure(zval *zv)
 {
 	zend_fcall_info_cache fcc;
 	char *errstr = NULL;
@@ -261,36 +254,29 @@ zend_array* EMSCRIPTEN_KEEPALIVE vrzno_expose_closure(zval *zv)
 	return NULL;
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_key_pointer(zval *zv, char *key)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_key_pointer(zend_array *za, char *key)
 {
 	zend_string *zKey = zend_string_init(key, strlen(key), 0);
-	zval *rv = zend_hash_find(Z_ARRVAL_P(zv), zKey);
+	zval *rv = zend_hash_find(za, zKey);
 	zend_string_release(zKey);
 	return rv;
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_property_pointer(zval *zv, char *name)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_property_pointer(zend_object *zo, char *name)
 {
 	zval *rv = NULL;
-	return zend_read_property(Z_OBJCE_P(zv), Z_OBJ_P(zv), name, strlen(name), 1, rv);
+	return zend_read_property(zo->ce, zo, name, strlen(name), 1, rv);
 }
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zval *zv, unsigned offset)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_dimension_pointer(zend_array *za, unsigned offset)
 {
-	if(Z_TYPE_P(zv) == IS_OBJECT)
-	{
-		char prop[2 + (!offset ? 1 : (int)log10(offset))];
-		sprintf(prop, "%d", offset);
-		return vrzno_expose_property_pointer(zv, prop);
-	}
-
-	return zend_hash_index_find(Z_ARRVAL_P(zv), offset);
+	return zend_hash_index_find(za, offset);
 }
 
-zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_pointer(zval *zv, char *method)
+zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_pointer(zend_object *zo, char *method)
 {
 	zend_string *zMethod = zend_string_init(method, strlen(method), 0);
-	zend_function *zf = zend_std_get_method(&Z_OBJ_P(zv), zMethod, 0);
+	zend_function *zf = zend_std_get_method(&zo, zMethod, 0);
 	zend_string_release(zMethod);
 	return zf;
 }

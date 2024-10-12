@@ -309,7 +309,7 @@ PHP_MINIT_FUNCTION(vrzno)
 					throw new Error('WeakerMap values must be objects.');
 				}
 
-				if(this.map.has(key))
+				if(this.has(key))
 				{
 					this.registry.unregister(this.get(key));
 				}
@@ -328,40 +328,184 @@ PHP_MINIT_FUNCTION(vrzno)
 		Module.unregisterTokens = Module.unregisterTokens || new WeakMap;
 		Module.registered = Module.registered || new Module.WeakerMap;
 
-		Module.marshalObject = ((zv, type) => {
-			const nativeTarget = Module.ccall(
+		Module.marshalZObject = ((zo, type) => {
+			const nativeTargetId = Module.ccall(
 				'vrzno_expose_target'
 				, 'number'
 				, ['number']
-				, [zv]
+				, [zo]
 			);
 
-			if(nativeTarget && Module.targets.hasId(nativeTarget))
+			if(nativeTargetId)
 			{
-				return Module.targets.get(nativeTarget);
+				return Module.targets.get(nativeTargetId);
 			}
 
 			const proxy = new Proxy({}, {
 				ownKeys: (target) => {
-					let keysLoc;
-					if(type === IS_ARRAY)
+					const keysLoc = Module.ccall(
+						'vrzno_expose_object_keys'
+						, 'number'
+						, ['number']
+						, [zo]
+					);
+
+					if(keysLoc)
 					{
-						keysLoc = Module.ccall(
-							'vrzno_expose_array_keys'
-							, 'number'
-							, ['number']
-							, [zv]
-						);
+						const keyJson = UTF8ToString(keysLoc);
+						const keys = JSON.parse(keyJson);
+						_free(keysLoc);
+						keys.push(...Reflect.ownKeys(target));
+						return keys;
 					}
-					else if(type === IS_OBJECT)
+
+					return [];
+				},
+
+				has: (target, prop) => {
+					const len = lengthBytesUTF8(prop) + 1;
+					const namePtr = _malloc(len);
+
+					stringToUTF8(prop, namePtr, len);
+
+					const propPtr = Module.ccall(
+						'vrzno_expose_property_pointer'
+						, 'number'
+						, ['number', 'number']
+						, [zo, namePtr]
+					);
+
+					_free(namePtr);
+
+					return propPtr;
+				},
+
+				get: (target, prop) => {
+					let retPtr;
+					if(prop === Symbol.iterator)
 					{
-						keysLoc = Module.ccall(
+						const keysLoc = Module.ccall(
 							'vrzno_expose_object_keys'
 							, 'number'
 							, ['number']
-							, [zv]
+							, [zo]
 						);
+						const keyJson = UTF8ToString(keysLoc);
+						const keys = JSON.parse(keyJson);
+						_free(keysLoc);
+
+						const iterator = () => {
+							let current = -1;
+							return {
+								next() {
+									const done = ++current >= keys.length;
+									return {done, value: [keys[current], Module.zvalToJS(Module.ccall(
+										'vrzno_expose_property_pointer'
+										, 'number'
+										, ['number', 'string']
+										, [zo, keys[current]]
+									))]};
+								}
+							}
+						};
+
+						Module.fRegistry.register(iterator, zo, iterator);
+
+						return iterator;
 					}
+
+					if(prop === Symbol.toPrimitive)
+					{
+						const method = '__toString';
+						const len = lengthBytesUTF8(method) + 1;
+						const loc = _malloc(len);
+						stringToUTF8(method, loc, len);
+
+						const methodPtr = Module.ccall(
+							'vrzno_expose_method_pointer'
+							, 'number'
+							, ['number', 'number']
+							, [zo, loc]
+						);
+
+						_free(loc);
+
+						return () => Module.callableToJs(methodPtr, zo)();
+					}
+
+					prop = String(prop);
+					const len = lengthBytesUTF8(prop) + 1;
+					const loc = _malloc(len);
+					stringToUTF8(prop, loc, len);
+
+					const methodPtr = Module.ccall(
+						'vrzno_expose_method_pointer'
+						, 'number'
+						, ['number', 'number']
+						, [zo, loc]
+					);
+
+					if(methodPtr)
+					{
+						const wrapped = Module.callableToJs(methodPtr, zo);
+						Module.fRegistry.register(wrapped, zo, wrapped);
+						return wrapped;
+					}
+
+					retPtr = Module.ccall(
+						'vrzno_expose_property_pointer'
+						, 'number'
+						, ['number', 'number']
+						, [zo, loc]
+					);
+
+					_free(loc);
+
+					if(!retPtr)
+					{
+						return;
+					}
+
+					const proxy = Module.zvalToJS(retPtr);
+
+					return proxy ?? Reflect.get(target, prop);
+				},
+
+				getOwnPropertyDescriptor: (target, prop) => {
+					prop = String(prop);
+					const len = lengthBytesUTF8(prop) + 1;
+					const namePtr = _malloc(len);
+					stringToUTF8(prop, namePtr, len);
+
+					const retPtr = Module.ccall(
+						'vrzno_expose_property_pointer'
+						, 'number'
+						, ['number', 'number']
+						, [zo, namePtr]
+					);
+
+					_free(namePtr);
+
+					const proxy = Module.zvalToJS(retPtr);
+
+					return {configurable: true, enumerable: true, value: target[prop]};
+				},
+			});
+
+			Module.fRegistry.register(proxy, zo, proxy);
+
+			return proxy;
+		});
+
+		Module.marshalZArray = ((za, type) => {
+			const proxy = new Proxy({}, {
+				ownKeys: (target) => {
+					const keysLoc = Module.ccall(
+						'vrzno_expose_array_keys'
+						, 'number'
+						, ['number']
+						, [za]
+					);
 
 					if(keysLoc)
 					{
@@ -382,7 +526,7 @@ PHP_MINIT_FUNCTION(vrzno)
 								'vrzno_expose_dimension_pointer'
 								, 'number'
 								, ['number', 'number']
-								, [zv, prop]
+								, [za, prop]
 							);
 
 						case 'string':
@@ -392,10 +536,10 @@ PHP_MINIT_FUNCTION(vrzno)
 							stringToUTF8(prop, namePtr, len);
 
 							const propPtr = Module.ccall(
-								'vrzno_expose_property_pointer'
+								'vrzno_expose_key_pointer'
 								, 'number'
 								, ['number', 'number']
-								, [zv, namePtr]
+								, [za, namePtr]
 							);
 
 							_free(namePtr);
@@ -410,99 +554,35 @@ PHP_MINIT_FUNCTION(vrzno)
 					let retPtr;
 					if(prop === Symbol.iterator)
 					{
-						let iterator;
-						if(type === IS_ARRAY)
-						{
-							const max = Module.ccall(
-								'vrzno_expose_array_length'
-								, 'number'
-								, ['number']
-								, [zv]
-							);
+						const max = Module.ccall(
+							'vrzno_expose_array_length'
+							, 'number'
+							, ['number']
+							, [za]
+						);
 
-							iterator = () => {
-								let current = -1;
-								return {
-									next() {
-										const done = ++current >= max;
-										return {done, value: Module.zvalToJS(Module.ccall(
-											'vrzno_expose_dimension_pointer'
-											, 'number'
-											, ['number', 'number']
-											, [zv, current]
-										))};
-									}
+						const iterator = () => {
+							let current = -1;
+							return {
+								next() {
+									const done = ++current >= max;
+									return {done, value: Module.zvalToJS(Module.ccall(
+										'vrzno_expose_dimension_pointer'
+										, 'number'
+										, ['number', 'number']
+										, [za, current]
+									))};
 								}
-							};
+							}
+						};
 
-							const gc = Module.ccall(
-								'vrzno_expose_array'
-								, 'number'
-								, ['number']
-								, [zv]
-							);
-
-							Module.fRegistry.register(iterator, gc, iterator);
-							// console.log('Freg %s, %d', 'a1', gc);
-						}
-						else if(type === IS_OBJECT)
-						{
-							const keysLoc = Module.ccall(
-								'vrzno_expose_object_keys'
-								, 'number'
-								, ['number']
-								, [zv]
-							);
-							const keyJson = UTF8ToString(keysLoc);
-							const keys = JSON.parse(keyJson);
-							_free(keysLoc);
-
-							iterator = () => {
-								let current = -1;
-								return {
-									next() {
-										const done = ++current >= keys.length;
-										return {done, value: [keys[current], Module.zvalToJS(Module.ccall(
-											'vrzno_expose_property_pointer'
-											, 'number'
-											, ['number', 'string']
-											, [zv, keys[current]]
-										))]};
-									}
-								}
-							};
-
-							const gc = Module.ccall(
-								'vrzno_expose_object'
-								, 'number'
-								, ['number']
-								, [zv]
-							);
-
-							Module.fRegistry.register(iterator, gc, iterator);
-							// console.log('Freg %s, %d', 'a2', gc);
-						}
+						Module.fRegistry.register(iterator, za, iterator);
 
 						return iterator;
 					}
 
 					if(prop === Symbol.toPrimitive)
 					{
-						const method = '__toString';
-						const len = lengthBytesUTF8(method) + 1;
-						const loc = _malloc(len);
-						stringToUTF8(method, loc, len);
-
-						const methodPtr = Module.ccall(
-							'vrzno_expose_method_pointer'
-							, 'number'
-							, ['number', 'number']
-							, [zv, loc]
-						);
-
-						_free(loc);
-
-						return () => Module.callableToJs(methodPtr, zv)();
 					}
 
 					switch(typeof prop)
@@ -512,7 +592,7 @@ PHP_MINIT_FUNCTION(vrzno)
 								'vrzno_expose_dimension_pointer'
 								, 'number'
 								, ['number', 'number']
-								, [zv, prop]
+								, [za, prop]
 							);
 							break;
 
@@ -522,48 +602,12 @@ PHP_MINIT_FUNCTION(vrzno)
 							const loc = _malloc(len);
 							stringToUTF8(prop, loc, len);
 
-							if(type === IS_OBJECT)
-							{
-								const methodPtr = Module.ccall(
-									'vrzno_expose_method_pointer'
-									, 'number'
-									, ['number', 'number']
-									, [zv, loc]
-								);
-
-								if(methodPtr)
-								{
-									const wrapped = Module.callableToJs(methodPtr, zv);
-
-									const gc = Module.ccall(
-										'vrzno_expose_closure'
-										, 'number'
-										, ['number']
-										, [zv]
-									);
-
-									Module.fRegistry.register(wrapped, gc, wrapped);
-									// console.log('Freg %s, %d', 'b', gc);
-
-									return wrapped;
-								}
-
-								retPtr = Module.ccall(
-									'vrzno_expose_property_pointer'
-									, 'number'
-									, ['number', 'number']
-									, [zv, loc]
-								);
-							}
-							else if(type === IS_ARRAY)
-							{
-								retPtr = Module.ccall(
-									'vrzno_expose_key_pointer'
-									, 'number'
-									, ['number', 'number']
-									, [zv, loc]
-								);
-							}
+							retPtr = Module.ccall(
+								'vrzno_expose_key_pointer'
+								, 'number'
+								, ['number', 'number']
+								, [za, loc]
+							);
 
 							_free(loc);
 
@@ -591,7 +635,7 @@ PHP_MINIT_FUNCTION(vrzno)
 								'vrzno_expose_dimension_pointer'
 								, 'number'
 								, ['number', 'number']
-								, [zv, prop]
+								, [za, prop]
 							);
 							break;
 
@@ -600,24 +644,12 @@ PHP_MINIT_FUNCTION(vrzno)
 							const namePtr = _malloc(len);
 							stringToUTF8(prop, namePtr, len);
 
-							if(type === IS_OBJECT)
-							{
-								retPtr = Module.ccall(
-									'vrzno_expose_property_pointer'
-									, 'number'
-									, ['number', 'number']
-									, [zv, namePtr]
-								);
-							}
-							else if(type === IS_ARRAY)
-							{
-								retPtr = Module.ccall(
-									'vrzno_expose_key_pointer'
-									, 'number'
-									, ['number', 'number']
-									, [zv, namePtr]
-								);
-							}
+							retPtr = Module.ccall(
+								'vrzno_expose_key_pointer'
+								, 'number'
+								, ['number', 'number']
+								, [za, namePtr]
+							);
 
 							_free(namePtr);
 
@@ -633,35 +665,12 @@ PHP_MINIT_FUNCTION(vrzno)
 				},
 			});
 
-			if(type === IS_ARRAY)
-			{
-				const gc = Module.ccall(
-					'vrzno_expose_array'
-					, 'number'
-					, ['number']
-					, [zv]
-				);
-
-				Module.fRegistry.register(proxy, gc, proxy);
-				// console.log('Freg %s, %d', 'c2', gc);
-			}
-			else if (type === IS_OBJECT)
-			{
-				const gc = Module.ccall(
-					'vrzno_expose_object'
-					, 'number'
-					, ['number']
-					, [zv]
-				);
-
-				Module.fRegistry.register(proxy, gc, proxy);
-				// console.log('Freg %s, %d', 'c2', gc);
-			}
+			Module.fRegistry.register(proxy, za, proxy);
 
 			return proxy;
 		});
 
-		Module.callableToJs = Module.callableToJs || ((funcPtr, objPtr = null) => {
+		Module.callableToJs = Module.callableToJs || ((funcPtr, zo = null) => {
 			if(Module._callables.has(funcPtr))
 			{
 				return Module._callables.get(funcPtr);
@@ -695,7 +704,7 @@ PHP_MINIT_FUNCTION(vrzno)
 					'vrzno_exec_callback'
 					, 'number'
 					, ['number','number','number','number']
-					, [funcPtr, paramsPtr, args.length, objPtr]
+					, [funcPtr, paramsPtr, args.length, zo]
 				);
 
 				if(args.length)
@@ -710,8 +719,7 @@ PHP_MINIT_FUNCTION(vrzno)
 
 				if(zv)
 				{
-					const result = Module.zvalToJS(zv);
-					return result;
+					return Module.zvalToJS(zv);
 				}
 			};
 
@@ -721,13 +729,6 @@ PHP_MINIT_FUNCTION(vrzno)
 			Module._callables.set(funcPtr, wrapped);
 
 			return wrapped;
-
-			// Module.ccall(
-			// 	'vrzno_expose_inc_crefcount'
-			// 	, 'number'
-			// 	, ['number']
-			// 	, [funcPtr]
-			// );
 		});
 
 		Module.zvalToJS = Module.zvalToJS || (zv => {
@@ -743,16 +744,16 @@ PHP_MINIT_FUNCTION(vrzno)
 				, [zv]
 			);
 
-			const isNative = Module.ccall(
-				'vrzno_expose_target'
+			const nativeTargetId = Module.ccall(
+				'vrzno_expose_zval_target'
 				, 'number'
 				, ['number']
 				, [zv]
 			);
 
-			if(isNative)
+			if(nativeTargetId)
 			{
-				return Module.targets.get(isNative);
+				return Module.targets.get(nativeTargetId);
 			}
 
 			const callable = Module.ccall(
@@ -761,8 +762,6 @@ PHP_MINIT_FUNCTION(vrzno)
 				, ['number']
 				, [zv]
 			);
-
-			let valPtr;
 
 			if(callable)
 			{
@@ -787,6 +786,7 @@ PHP_MINIT_FUNCTION(vrzno)
 				, [zv]
 			);
 
+			let valPtr;
 			switch(type)
 			{
 				case IS_UNDEF:
@@ -847,8 +847,25 @@ PHP_MINIT_FUNCTION(vrzno)
 					break;
 
 				case IS_ARRAY:
+					const za = Module.ccall(
+						'vrzno_expose_array'
+						, 'number'
+						, ['number']
+						, [zv]
+					);
+					return Module.marshalZArray(za, type);
+					break;
+
 				case IS_OBJECT:
-					return Module.marshalObject(zv, type);
+					const zo = Module.ccall(
+						'vrzno_expose_object'
+						, 'number'
+						, ['number']
+						, [zv]
+					);
+					return Module.marshalZObject(zo, type);
+					break;
+
 				default:
 					return null;
 					break;
@@ -1084,7 +1101,7 @@ ZEND_TSRMLS_CACHE_DEFINE()
 ZEND_GET_MODULE(vrzno)
 #endif
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval **argv, int argc, zval *obj)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval **argv, int argc, zend_object *zo)
 {
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
@@ -1105,10 +1122,10 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval **argv,
 	fci.object = NULL;
 	fcc.object = NULL;
 
-	if(obj)
+	if(zo)
 	{
-		fci.object = Z_OBJ_P(obj);
-		fcc.object = Z_OBJ_P(obj);
+		fci.object = zo;
+		fcc.object = zo;
 	}
 
 	if(argc)
