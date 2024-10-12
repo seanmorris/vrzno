@@ -132,9 +132,7 @@ php_stream *php_stream_fetch_open(
 			EM_ASM({ {
 				const context = Module.targets.get($0);
 				const method = UTF8ToString($1);
-
 				context.method = method;
-
 			} }, context, Z_STRVAL_P(tmpzval));
 		}
 
@@ -157,7 +155,7 @@ php_stream *php_stream_fetch_open(
 							context.headers = context.headers ?? {};
 							context.headers[key] = val;
 
-							console.log(context.headers);
+							// console.log(context.headers);
 						})() }, contextId, Z_STRVAL_P(tmpheader));
 					}
 				} ZEND_HASH_FOREACH_END();
@@ -178,7 +176,7 @@ php_stream *php_stream_fetch_open(
 						context.headers = context.headers ?? {};
 						context.headers[key] = val;
 
-						console.log(context.headers);
+						// console.log(context.headers);
 					});
 				})() }, contextId, Z_STRVAL_P(tmpheader));
 			}

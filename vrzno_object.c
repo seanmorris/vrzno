@@ -70,23 +70,22 @@ static struct _zend_class_entry *vrzno_create_class(jstarget *targetId)
 	snprintf(name, 256, "Vrzno:::{%p}", targetId);
 
 	INIT_CLASS_ENTRY(ce, name, vrzno_vrzno_methods);
-	vrzno_subclass_entry = zend_register_internal_class(&ce);
+	vrzno_subclass_entry = zend_register_internal_class_ex(&ce, vrzno_class_entry);
 
-	vrzno_subclass_entry->create_object = vrzno_create_object;
-	vrzno_subclass_entry->get_iterator  = vrzno_array_get_iterator;
-#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
-	vrzno_subclass_entry->ce_flags |= ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES;
-#endif
+// 	vrzno_subclass_entry->create_object = vrzno_create_object;
+// 	vrzno_subclass_entry->get_iterator  = vrzno_array_get_iterator;
+// #if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
+// 	vrzno_subclass_entry->ce_flags |= ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES;
+// #endif
 
-	vrzno_subclass_entry->ce_flags |= ZEND_ACC_LINKED;
+// 	vrzno_subclass_entry->ce_flags |= ZEND_ACC_LINKED;
+// 	// vrzno_subclass_entry->parent = vrzno_class_entry;
 
-	vrzno_subclass_entry->parent = vrzno_class_entry;
-
-#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
-	zend_string *attribute_name_AllowDynamicProperties_class_vrzno = zend_string_init_interned("AllowDynamicProperties", sizeof("AllowDynamicProperties") - 1, 1);
-	zend_add_class_attribute(vrzno_subclass_entry, attribute_name_AllowDynamicProperties_class_vrzno, 0);
-	zend_string_release(attribute_name_AllowDynamicProperties_class_vrzno);
-#endif
+// #if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
+// 	zend_string *attribute_name_AllowDynamicProperties_class_vrzno = zend_string_init_interned("AllowDynamicProperties", sizeof("AllowDynamicProperties") - 1, 1);
+// 	zend_add_class_attribute(vrzno_subclass_entry, attribute_name_AllowDynamicProperties_class_vrzno, 0);
+// 	zend_string_release(attribute_name_AllowDynamicProperties_class_vrzno);
+// #endif
 
 	return vrzno_subclass_entry;
 }
@@ -138,7 +137,6 @@ static void vrzno_object_free(zend_object *zobj)
 		if(target)
 		{
 			Module.tacked.delete(target);
-			Module.fRegistry.unregister(target);
 		}
 	}, vrzno_fetch_object(zobj)->targetId);
 
@@ -174,25 +172,26 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 	vrzno_object *vrzno = vrzno_fetch_object(object);
 	jstarget *targetId = vrzno->targetId;
 
+	bool isCallable;
 	char *errstr = NULL;
 	zend_fcall_info_cache fcc;
-
-	bool isCallable = zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr);
 
 	if(Z_TYPE_P(newValue) == IS_OBJECT && Z_OBJCE_P(newValue) == vrzno_class_entry)
 	{
 		isCallable = vrzno_fetch_object(Z_OBJ_P(newValue))->isFunction;
 	}
-
-	if(Z_TYPE_P(newValue) == IS_OBJECT && Z_OBJCE_P(newValue)->parent == vrzno_class_entry)
+	else if(Z_TYPE_P(newValue) == IS_OBJECT && Z_OBJCE_P(newValue)->parent == vrzno_class_entry)
 	{
 		isCallable = vrzno_fetch_object(Z_OBJ_P(newValue))->isFunction;
+	}
+	else
+	{
+		isCallable = zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr);
 	}
 
 	if(isCallable)
 	{
-		Z_ADDREF_P(newValue);
-
+		// Z_ADDREF_P(newValue);
 		EM_ASM({ (() =>{
 			const target   = Module.targets.get($0);
 			const property = UTF8ToString($1);
@@ -202,7 +201,15 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 
 			target[property] = Module.callableToJs(funcPtr);
 
-			// Module.fRegistry.register(target[property], zvalPtr, target[property]);
+			const gc = Module.ccall(
+				'vrzno_expose_array'
+				, 'number'
+				, ['number']
+				, [zvalPtr]
+			);
+
+			Module.fRegistry.register(target[property], gc, target[property]);
+			// console.log('Freg %s, %d', 'e', zvalPtr);
 
 		})() }, targetId, name, fcc.function_handler, newValue, fcc.function_handler->common.num_args);
 
@@ -212,7 +219,7 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 	switch(Z_TYPE_P(newValue))
 	{
 		case IS_OBJECT:
-			Z_ADDREF_P(newValue);
+			// Z_ADDREF_P(newValue);
 			EM_ASM({ (() =>{
 				const target = Module.targets.get($0);
 				const property = UTF8ToString($1);
@@ -322,25 +329,26 @@ void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 	jstarget *targetId = vrzno->targetId;
 	long index = Z_LVAL_P(offset);
 
-	zend_fcall_info_cache fcc;
+	bool isCallable;
 	char *errstr = NULL;
-
-	bool isCallable = zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr);
+	zend_fcall_info_cache fcc;
 
 	if(Z_OBJCE_P(newValue) == vrzno_class_entry)
 	{
 		isCallable = vrzno_fetch_object(Z_OBJ_P(newValue))->isFunction;
 	}
-
-	if(Z_OBJCE_P(newValue)->parent == vrzno_class_entry)
+	else if(Z_OBJCE_P(newValue)->parent == vrzno_class_entry)
 	{
 		isCallable = vrzno_fetch_object(Z_OBJ_P(newValue))->isFunction;
+	}
+	else
+	{
+		isCallable = zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr);
 	}
 
 	if(isCallable)
 	{
-		Z_ADDREF_P(newValue);
-
+		// Z_ADDREF_P(newValue);
 		EM_ASM({ (() => {
 			const target   = Module.targets.get($0);
 			const property = $1;
@@ -348,7 +356,17 @@ void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 			const zvalPtr  = $3;
 
 			target[property] = Module.callableToJs(funcPtr);
-			// Module.fRegistry.register(target[property], zvalPtr, target[property]);
+
+			const gc = Module.ccall(
+				'vrzno_expose_array'
+				, 'number'
+				, ['number']
+				, [zvalPtr]
+			);
+
+			Module.fRegistry.register(target[property], gc, target[property]);
+			// console.log('Freg %s, %d', 'f', zvalPtr);
+
 		})() }, targetId, index, fcc.function_handler, newValue);
 
 		return;
@@ -357,9 +375,7 @@ void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 	switch(Z_TYPE_P(newValue))
 	{
 		case IS_OBJECT:
-
 			// Z_ADDREF_P(newValue);
-
 			EM_ASM({ (() =>{
 				const target = Module.targets.get($0);
 				const property = $1;
@@ -435,8 +451,6 @@ void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 int vrzno_has_dimension(zend_object *object, zval *offset, int check_empty)
 {
 	return EM_ASM_INT({
-		console.log('HASD', $0);
-
 		const target      = Module.targets.get($0);
 		const property    = $1;
 		const check_empty = $2;

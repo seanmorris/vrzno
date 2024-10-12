@@ -1,16 +1,21 @@
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_refcount(zval *zv)
+zend_refcounted* EMSCRIPTEN_KEEPALIVE vrzno_expose_gc_ptr(zval *rc)
 {
-	Z_ADDREF_P(zv);
+	return Z_COUNTED_P(rc);
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_refcount(zval *zv)
+uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_refcount(zend_refcounted *rc)
 {
-	Z_DELREF_P(zv);
+	return GC_ADDREF(rc);
 }
 
-uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_zrefcount(zval *zv)
+uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_dec_refcount(zend_refcounted *rc)
 {
-	return Z_REFCOUNT_P(zv);
+	return GC_DELREF(rc);
+}
+
+uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_refcount(zend_refcounted *rc)
+{
+	return GC_REFCOUNT(rc);
 }
 
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_crefcount(zend_function *fptr)
@@ -232,6 +237,30 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_string(zval *zv)
 {
 	return Z_STRVAL_P(zv);
 }
+
+zend_object* EMSCRIPTEN_KEEPALIVE vrzno_expose_object(zval *zv)
+{
+	return Z_OBJ_P(zv);
+}
+
+zend_array* EMSCRIPTEN_KEEPALIVE vrzno_expose_array(zval *zv)
+{
+	return Z_ARR_P(zv);
+}
+
+zend_array* EMSCRIPTEN_KEEPALIVE vrzno_expose_closure(zval *zv)
+{
+	zend_fcall_info_cache fcc;
+	char *errstr = NULL;
+
+	if(zend_is_callable_ex(zv, NULL, 0, NULL, &fcc, &errstr))
+	{
+		return ZEND_CLOSURE_OBJECT(fcc.function_handler);
+	}
+
+	return NULL;
+}
+
 zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_key_pointer(zval *zv, char *key)
 {
 	zend_string *zKey = zend_string_init(key, strlen(key), 0);
