@@ -158,7 +158,7 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 	vrzno_object *vrzno = vrzno_fetch_object(object);
 	jstarget *targetId = vrzno->targetId;
 
-	bool isCallable;
+	bool isCallable = 0;
 	char *errstr = NULL;
 	zend_fcall_info_cache fcc;
 
@@ -170,7 +170,7 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 	{
 		isCallable = vrzno_fetch_object(Z_OBJ_P(newValue))->isFunction;
 	}
-	else
+	else if(Z_TYPE_P(newValue) != IS_STRING)
 	{
 		isCallable = zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr);
 	}
@@ -334,7 +334,7 @@ void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 	jstarget *targetId = vrzno->targetId;
 	long index = Z_LVAL_P(offset);
 
-	bool isCallable;
+	bool isCallable = 0;
 	char *errstr = NULL;
 	zend_fcall_info_cache fcc;
 
@@ -346,7 +346,7 @@ void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 	{
 		isCallable = vrzno_fetch_object(Z_OBJ_P(newValue))->isFunction;
 	}
-	else
+	else if(Z_TYPE_P(newValue) != IS_STRING)
 	{
 		isCallable = zend_is_callable_ex(newValue, NULL, 0, NULL, &fcc, &errstr);
 	}

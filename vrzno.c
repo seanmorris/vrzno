@@ -768,6 +768,13 @@ PHP_RINIT_FUNCTION(vrzno)
 				return Module.targets.get(nativeTargetId);
 			}
 
+			const type = Module.ccall(
+				'vrzno_expose_type'
+				, 'number'
+				, ['number']
+				, [zv]
+			);
+
 			const zf = Module.ccall(
 				'vrzno_expose_callable'
 				, 'number'
@@ -775,7 +782,7 @@ PHP_RINIT_FUNCTION(vrzno)
 				, [zv]
 			);
 
-			if(zf)
+			if(zf && type !== IS_STRING)
 			{
 				const wrapped = Module.callableToJs(zf);
 
@@ -790,13 +797,6 @@ PHP_RINIT_FUNCTION(vrzno)
 
 				return wrapped;
 			}
-
-			const type = Module.ccall(
-				'vrzno_expose_type'
-				, 'number'
-				, ['number']
-				, [zv]
-			);
 
 			let valPtr;
 			switch(type)
