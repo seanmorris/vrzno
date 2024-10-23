@@ -53,6 +53,8 @@ PHP_RSHUTDOWN_FUNCTION(vrzno)
 			Module.registered.delete(gc);
 		});
 	});
+
+	return SUCCESS;
 }
 
 PHP_MINIT_FUNCTION(vrzno)
@@ -95,15 +97,7 @@ PHP_MINIT_FUNCTION(vrzno)
 
 	EM_ASM({
 		Module.hasVrzno = true;
-	});
 
-	// return php_pdo_register_driver(&pdo_vrzno_driver);
-	return SUCCESS;
-}
-
-PHP_RINIT_FUNCTION(vrzno)
-{
-	EM_ASM({
 		const IS_UNDEF  = 0;
 		const IS_NULL   = 1;
 		const IS_FALSE  = 2;
@@ -1094,7 +1088,7 @@ zend_module_entry vrzno_module_entry = {
 	vrzno_functions,           /* zend_function_entry */
 	PHP_MINIT(vrzno),          /* PHP_MINIT - Module initialization */
 	NULL,                      /* PHP_MSHUTDOWN - Module shutdown */
-	PHP_RINIT(vrzno),          /* PHP_RINIT - Request initialization */
+	NULL,                      /* PHP_RINIT - Request initialization */
 	PHP_RSHUTDOWN(vrzno),      /* PHP_RSHUTDOWN - Request shutdown */
 	PHP_MINFO(vrzno),          /* PHP_MINFO - Module info */
 	PHP_VRZNO_VERSION,         /* Version */
