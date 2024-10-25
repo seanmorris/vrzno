@@ -133,7 +133,7 @@ php_stream *php_stream_fetch_open(
 				const context = Module.targets.get($0);
 				const method = UTF8ToString($1);
 				context.method = method;
-			} }, context, Z_STRVAL_P(tmpzval));
+			} }, contextId, Z_STRVAL_P(tmpzval));
 		}
 
 		if((tmpzval = php_stream_context_get_option(context, "http", "header")) != NULL)
@@ -154,8 +154,6 @@ php_stream *php_stream_fetch_open(
 
 							context.headers = context.headers ?? {};
 							context.headers[key] = val;
-
-							// console.log(context.headers);
 						})() }, contextId, Z_STRVAL_P(tmpheader));
 					}
 				} ZEND_HASH_FOREACH_END();
@@ -175,10 +173,8 @@ php_stream *php_stream_fetch_open(
 
 						context.headers = context.headers ?? {};
 						context.headers[key] = val;
-
-						// console.log(context.headers);
 					});
-				})() }, contextId, Z_STRVAL_P(tmpheader));
+				})() }, contextId, Z_STRVAL_P(tmpzval));
 			}
 		}
 
@@ -209,7 +205,7 @@ php_stream *php_stream_fetch_open(
 
 	self = emalloc(sizeof(*self));
 	self->fpos = 0;
-	self->targetId = php_stream_fetch_real_open(path, context, sizeof(char*), &headersv, &headersc);
+	self->targetId = php_stream_fetch_real_open(path, contextId, sizeof(char*), &headersv, &headersc);
 
 	php_stream_notify_info(context, PHP_STREAM_NOTIFY_CONNECT, NULL, 0);
 
