@@ -90,7 +90,7 @@ EM_ASYNC_JS(ssize_t, php_stream_fetch_real_open, (
 	let i = 0;
 	for(const line of headerLines)
 	{
-		const len = lengthBytesUTF8(line);
+		const len = lengthBytesUTF8(line) + 1;
 		const loc = _malloc(len);
 		stringToUTF8(line, loc, len);
 		setValue(headersloc + (i * ptrsize), loc, 'i' + (8 * ptrsize));
@@ -239,7 +239,16 @@ php_stream *php_stream_fetch_open(
 	}
 
 	stream = php_stream_alloc(&php_stream_fetch_io_ops, self, NULL, mode);
+
 	ZVAL_COPY(&stream->wrapperdata, response_header);
+
+	zend_set_local_var_str(
+		"http_response_header",
+		-1 + sizeof("http_response_header"),
+		&stream->wrapperdata,
+		0
+	);
+
 	stream->flags |= PHP_STREAM_FLAG_NO_BUFFER;
 	stream->flags |= PHP_STREAM_FLAG_NO_SEEK;
 	stream->eof = 0;
