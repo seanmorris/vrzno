@@ -76,31 +76,42 @@ EM_ASYNC_JS(ssize_t, php_stream_fetch_real_open, (
 ), {
 	const pathString = UTF8ToString(path);
 	const context = Module.targets.get(_context) || {};
-	const response = await fetch(pathString, context);
-	const buffer = new Uint8Array( await response.arrayBuffer() );
-	const status = response.status;
 
-	const headerLines = [...response.headers.entries()].map(([key, val]) => `${key}: ${val}`);
-	headerLines.unshift(`HTTP/1.1 ${response.status} ${response.statusText}`);
-
-	const headersloc = _malloc(ptrsize * headerLines.length);
-	setValue(headersv, headersloc, '*');
-	setValue(headersc, headerLines.length, 'i32');
-
-	let i = 0;
-	for(const line of headerLines)
+	try
 	{
-		const len = lengthBytesUTF8(line) + 1;
-		const loc = _malloc(len);
-		stringToUTF8(line, loc, len);
-		setValue(headersloc + (i * ptrsize), loc, 'i' + (8 * ptrsize));
-		i++;
-	}
+		const response = await fetch(pathString, context);
+		const buffer = new Uint8Array( await response.arrayBuffer() );
+		const status = response.status;
 
-	const parsed = {status, buffer, context};
-	Module.tacked.add(parsed);
-	Module.tacked.delete(context);
-	return Module.targets.add(parsed);
+		const headerLines = [...response.headers.entries()].map(([key, val]) => `${key}: ${val}`);
+		headerLines.unshift(`HTTP/1.1 ${response.status} ${response.statusText}`);
+
+		const headersloc = _malloc(ptrsize * headerLines.length); // free()'d in php_stream_fetch_open
+		setValue(headersv, headersloc, '*');
+		setValue(headersc, headerLines.length, 'i32');
+
+		let i = 0;
+		for(const line of headerLines)
+		{
+			const len = lengthBytesUTF8(line) + 1;
+			const loc = _malloc(len); // free()'d in php_stream_fetch_open
+			stringToUTF8(line, loc, len);
+			setValue(headersloc + (i * ptrsize), loc, 'i' + (8 * ptrsize));
+			i++;
+		}
+
+		const parsed = {status, buffer, context};
+		Module.tacked.add(parsed);
+		Module.tacked.delete(context);
+		return Module.targets.add(parsed);
+	}
+	catch(error)
+	{
+		const parsed = {status: -1, buffer: new TextEncoder().encode(error), context};
+		Module.tacked.add(parsed);
+		Module.tacked.delete(context);
+		return Module.targets.add(parsed);
+	}
 });
 
 php_stream *php_stream_fetch_open(
@@ -200,8 +211,8 @@ php_stream *php_stream_fetch_open(
 	php_stream_fetch_data *self;
 	php_stream *stream = NULL;
 
-	char **headersv;
-	size_t headersc;
+	char **headersv = NULL;
+	size_t headersc = 0;
 
 	self = emalloc(sizeof(*self));
 	self->fpos = 0;
@@ -209,20 +220,40 @@ php_stream *php_stream_fetch_open(
 
 	php_stream_notify_info(context, PHP_STREAM_NOTIFY_CONNECT, NULL, 0);
 
+	int status = EM_ASM_INT({ {
+		const parsed = Module.targets.get($0);
+		if(parsed.status < 0)
+		{
+			Module.tacked.delete(parsed);
+		}
+		return parsed.status;
+	} }, self->targetId);
+
 	if(!ignoreErrors)
 	{
-		int status = EM_ASM_INT({ {
-			const {status} = Module.targets.get($0);
-			return status;
-		} }, self->targetId);
-
 		if(status == 403)
 		{
 			php_stream_notify_error(context, PHP_STREAM_NOTIFY_AUTH_RESULT, "HTTP 403 Auth Error!", status);
 		}
-		else if(status >= 400)
+		else if(status >= 400 && status < 500)
 		{
 			php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "HTTP 4XX Error!", status);
+			php_stream_wrapper_log_error(wrapper, options, "HTTP %d Error!", status);
+		}
+		else if(status >= 500 && status < 600)
+		{
+			php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "HTTP 5XX Error!", status);
+			php_stream_wrapper_log_error(wrapper, options, "HTTP %d Error!", status);
+		}
+		else if(status >= 600)
+		{
+			php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "HTTP UNKNOWN Error!", status);
+			php_stream_wrapper_log_error(wrapper, options, "HTTP %d Error!", status);
+		}
+		else if(status == -1)
+		{
+			php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "Unexpected HTTP Error: %d", status);
+			php_stream_wrapper_log_error(wrapper, options, "Unexpected HTTP Error: %d", status);
 		}
 	}
 
@@ -231,11 +262,22 @@ php_stream *php_stream_fetch_open(
 
 	for(int i = 0; i < headersc; i++)
 	{
-		zval http_response;
-		char *line = headersv[i];
-		ZVAL_STRINGL(&http_response, line, strlen(line));
-		zend_hash_next_index_insert(Z_ARRVAL_P(response_header), &http_response);
-		free(line);
+		if(status >= 0)
+		{
+			zval http_response;
+			char *line = headersv[i];
+			ZVAL_STRINGL(&http_response, line, strlen(line));
+			zend_hash_next_index_insert(Z_ARRVAL_P(response_header), &http_response);
+		}
+
+		free(headersv[i]); // malloc()'d in php_stream_fetch_real_open
+	}
+
+	free(headersv); // malloc()'d in php_stream_fetch_real_open
+
+	if(status == -1)
+	{
+		return NULL;
 	}
 
 	stream = php_stream_alloc(&php_stream_fetch_io_ops, self, NULL, mode);

@@ -4,8 +4,11 @@
 # include "config.h"
 #endif
 
+#include <emscripten.h>
+
 #include "php.h"
 #include "php_ini.h"
+
 #include "SAPI.h"
 
 #include "ext/standard/info.h"
@@ -13,23 +16,17 @@
 #include "../json/php_json.h"
 #include "../json/php_json_encoder.h"
 #include "../json/php_json_parser.h"
+
 #include "zend_API.h"
 #include "zend_types.h"
 #include "zend_closures.h"
-#include <emscripten.h>
 #include "zend_hash.h"
+#include "zend_errors.h"
 
 #if PHP_MAJOR_VERSION >= 8
 # include "zend_attributes.h"
 #else
 # include <stdbool.h>
-#endif
-
-/* For compatibility with older PHP versions */
-#ifndef ZEND_PARSE_PARAMETERS_NONE
-#define ZEND_PARSE_PARAMETERS_NONE() \
-	ZEND_PARSE_PARAMETERS_START(0, 0) \
-	ZEND_PARSE_PARAMETERS_END()
 #endif
 
 #include "php_vrzno.h"
@@ -38,6 +35,13 @@
 #include "vrzno_expose.c"
 #include "vrzno_fetch.c"
 #include "vrzno_functions.c"
+
+/* For compatibility with older PHP versions */
+#ifndef ZEND_PARSE_PARAMETERS_NONE
+#define ZEND_PARSE_PARAMETERS_NONE() \
+	ZEND_PARSE_PARAMETERS_START(0, 0) \
+	ZEND_PARSE_PARAMETERS_END()
+#endif
 
 PHP_RSHUTDOWN_FUNCTION(vrzno)
 {
@@ -384,6 +388,8 @@ PHP_MINIT_FUNCTION(vrzno)
 					let retPtr;
 					if(prop === Symbol.iterator)
 					{
+						return; // @Todo: Detect PHP iterables w/vrzno_expose_is_iterable.
+
 						const keysLoc = Module.ccall(
 							'vrzno_expose_object_keys'
 							, 'number'
@@ -882,7 +888,7 @@ PHP_MINIT_FUNCTION(vrzno)
 			if(typeof value === 'undefined')
 			{
 				Module.ccall(
-					'vrzno_expose_create_undef'
+					'vrzno_expose_create_null' // vrzno_expose_create_undef causes problems when creating parameter lists...
 					, 'number'
 					, ['number']
 					, [rv]

@@ -99,7 +99,7 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zend_object* zo)
 		}
 	} ZEND_HASH_FOREACH_END();
 
-	index = NULL;
+	(void)index;
 
 	smart_str buf = {0};
 
@@ -131,7 +131,7 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_array_keys(zend_array *za)
 		}
 	} ZEND_HASH_FOREACH_END();
 
-	index = NULL;
+	(void)index;
 
 	smart_str buf = {0};
 
@@ -271,4 +271,9 @@ zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_pointer(zend_object *zo,
 	zend_function *zf = zend_std_get_method(&zo, zMethod, 0);
 	zend_string_release(zMethod);
 	return zf;
+}
+
+bool EMSCRIPTEN_KEEPALIVE vrzno_expose_is_iterable(const zval *zo)
+{
+	return zend_is_iterable(zo);
 }
