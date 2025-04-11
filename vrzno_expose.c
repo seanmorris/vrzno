@@ -3,6 +3,21 @@ zend_refcounted* EMSCRIPTEN_KEEPALIVE vrzno_expose_gc_ptr(zval *rc)
 	return Z_COUNTED_P(rc);
 }
 
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_zv_inc_refcount(zval *zv)
+{
+	Z_TRY_ADDREF_P(zv);
+}
+
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_zv_dec_refcount(zval *zv)
+{
+	Z_TRY_DELREF_P(zv);
+}
+
+uint32_t EMSCRIPTEN_KEEPALIVE vrzno_expose_zv_refcount(zval *zv)
+{
+	return Z_REFCOUNT_P(zv);
+}
+
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_inc_refcount(zend_refcounted *rc)
 {
 	GC_TRY_ADDREF(rc);

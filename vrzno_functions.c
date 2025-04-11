@@ -47,6 +47,7 @@ static const zend_function_entry vrzno_functions[] = {
 	PHP_FE_END
 };
 
+/* Deprecate! */
 PHP_FUNCTION(vrzno_eval)
 {
 	zend_string *retval;
@@ -57,7 +58,7 @@ PHP_FUNCTION(vrzno_eval)
 		Z_PARAM_STRING(js_code, js_code_len)
 	ZEND_PARSE_PARAMETERS_END();
 
-	char *js_ret = EM_ASM_INT({
+	char *js_ret = EM_ASM_PTR({
 		const str = String(eval(UTF8ToString($0)));
 		const len = lengthBytesUTF8(str) + 1;
 		const loc = _malloc(len);
@@ -75,6 +76,7 @@ PHP_FUNCTION(vrzno_eval)
 	RETURN_STR(retval);
 }
 
+/* Deprecate! */
 PHP_FUNCTION(vrzno_run)
 {
 	zend_string *retval;
@@ -101,7 +103,7 @@ PHP_FUNCTION(vrzno_run)
 
 	smart_str_0(&buf);
 
-	char *js_ret = EM_ASM_INT({
+	char *js_ret = EM_ASM_PTR({
 
 		const funcName = UTF8ToString($0);
 		const argJson  = UTF8ToString($1);
@@ -126,6 +128,7 @@ PHP_FUNCTION(vrzno_run)
 	RETURN_STR(retval);
 }
 
+/* Deprecate! */
 PHP_FUNCTION(vrzno_timeout)
 {
 	zend_fcall_info fci;
@@ -144,11 +147,18 @@ PHP_FUNCTION(vrzno_timeout)
 		const funcPtr = $1;
 
 		setTimeout(()=>{
-			Module.ccall(
+			const zv = Module.ccall(
 				'vrzno_exec_callback'
 				, 'number'
 				, ['number','number','number','number']
 				, [funcPtr, null, 0, 0]
+			);
+
+			Module.ccall(
+				'vrzno_expose_efree'
+				, 'number'
+				, ["number"]
+				, [zv]
 			);
 
 			Module.ccall(

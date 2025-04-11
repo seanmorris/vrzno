@@ -193,7 +193,7 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 				, [funcPtr]
 			);
 
-			Module.fRegistry.register(target[property], gc, target[property]);
+			Module.refcountRegistry.register(target[property], gc, target[property]);
 
 		})() }, targetId, name, fcc.function_handler, newValue, fcc.function_handler->common.num_args);
 
@@ -368,7 +368,7 @@ void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 				, [funcPtr]
 			);
 
-			Module.fRegistry.register(target[property], gc, target[property]);
+			Module.refcountRegistry.register(target[property], gc, target[property]);
 
 		})() }, targetId, index, fcc.function_handler, newValue);
 
