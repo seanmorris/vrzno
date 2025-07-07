@@ -35,6 +35,7 @@ Creates a new `Vrzno` object that holds a reference to Javascript's `globalThis`
 <?php
 $window = new Vrzno;
 ```
+
 ## PHP Functions
 
 ### `vrzno_await($promise)`
