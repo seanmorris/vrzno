@@ -579,6 +579,10 @@ PHP_MINIT_FUNCTION(vrzno)
 					return [];
 				},
 				has: (target, prop) => {
+					if(Number.isInteger(Number(prop)))
+					{
+						prop = Number(prop);
+					}
 					switch(typeof prop)
 					{
 						case 'number':
@@ -612,6 +616,10 @@ PHP_MINIT_FUNCTION(vrzno)
 				},
 				get: (target, prop) => {
 					let retPtr;
+					if(Number.isInteger(Number(prop)))
+					{
+						prop = Number(prop);
+					}
 					if(prop === Symbol.iterator)
 					{
 						const max = Module.ccall(
@@ -687,6 +695,10 @@ PHP_MINIT_FUNCTION(vrzno)
 					return proxy ?? Reflect.get(target, prop);
 				},
 				getOwnPropertyDescriptor: (target, prop) => {
+					if(Number.isInteger(Number(prop)))
+					{
+						prop = Number(prop);
+					}
 					let retPtr;
 					switch(typeof prop)
 					{
