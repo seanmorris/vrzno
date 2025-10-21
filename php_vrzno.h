@@ -20,6 +20,7 @@ ZEND_TSRMLS_CACHE_EXTERN()
 
 typedef struct {
 	zend_object zo;
+	long isArray;
 	long isFunction;
 	bool isConstructor;
 	jstarget *targetId;

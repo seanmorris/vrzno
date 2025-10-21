@@ -57,6 +57,7 @@ static struct _zend_object *vrzno_create_object(zend_class_entry *class_type)
 
 	vrzno->isConstructor = 0;
 	vrzno->isFunction = 0;
+	vrzno->isArray = 0;
 
 	return &vrzno->zo;
 }
@@ -76,7 +77,7 @@ static struct _zend_class_entry *vrzno_create_class(jstarget *targetId)
 	return vrzno_subclass_entry;
 }
 
-static vrzno_object *vrzno_create_object_for_target(jstarget *targetId, jstarget *isFunction, bool isConstructor)
+static vrzno_object *vrzno_create_object_for_target(jstarget *targetId, jstarget *isFunction, bool isConstructor, bool isArray)
 {
 	zend_class_entry *ce = vrzno_class_entry;
 
@@ -111,6 +112,7 @@ static vrzno_object *vrzno_create_object_for_target(jstarget *targetId, jstarget
     vrzno->targetId = targetId;
 	vrzno->isConstructor = isConstructor;
 	vrzno->isFunction = isFunction;
+	vrzno->isArray = isArray;
 
 	return vrzno;
 }
@@ -233,7 +235,7 @@ zval *vrzno_write_property(zend_object *object, zend_string *member, zval *newVa
 					, [zvalPtr]
 				);
 
-				target[property] = Module.marshalZArray(za);
+				target[property] = Module.marshalZArray(za, zvalPtr);
 
 			})() }, targetId, name, newValue);
 			break;
@@ -408,7 +410,7 @@ void vrzno_write_dimension(zend_object *object, zval *offset, zval *newValue)
 					, [zvalPtr]
 				);
 
-				target[property] = Module.marshalZArray(za);
+				target[property] = Module.marshalZArray(za, zvalPtr);
 
 			})() }, targetId, index, newValue);
 			break;

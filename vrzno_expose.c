@@ -75,9 +75,9 @@ void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_string(char* value, zval* rv)
 	ZVAL_STRING(rv, value);
 }
 
-void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(jstarget *targetId, jstarget *isFunction, int isConstructor, zval *rv)
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_create_object_for_target(jstarget *targetId, jstarget *isFunction, int isConstructor, int isArray, zval *rv)
 {
-	vrzno_object *vObj = vrzno_create_object_for_target(targetId, isFunction, isConstructor);
+	vrzno_object *vObj = vrzno_create_object_for_target(targetId, isFunction, isConstructor, isArray);
 	ZVAL_OBJ(rv, &vObj->zo);
 }
 
@@ -136,17 +136,19 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_array_keys(zend_array *za)
 {
 	zval keys;
 	array_init(&keys);
-	zend_string *key;
-	zend_ulong	*index;
+	zend_string *string_key;
+	zend_ulong *num_key;
 
-	ZEND_HASH_FOREACH_KEY(za, index, key) {
-		if(key)
+	ZEND_HASH_FOREACH_KEY(za, num_key, string_key) {
+		if(string_key)
 		{
-			add_next_index_string(&keys, ZSTR_VAL(key));
+			add_next_index_string(&keys, ZSTR_VAL(string_key));
+		}
+		else
+		{
+			add_next_index_string(&keys, ZSTR_VAL(zend_long_to_str(num_key)));
 		}
 	} ZEND_HASH_FOREACH_END();
-
-	(void)index;
 
 	smart_str buf = {0};
 
@@ -168,6 +170,11 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_deref(zval* zv)
 {
 	ZVAL_DEREF(zv);
 	return zv;
+}
+
+void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_ref(zval* zv, zval* zvv)
+{
+	ZVAL_NEW_REF(zv, zvv);
 }
 
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_dump(zval* zv, int depth)

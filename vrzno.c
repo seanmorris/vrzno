@@ -116,6 +116,8 @@ PHP_MINIT_FUNCTION(vrzno)
 
 		Module.tacked = new Set;
 
+		const origZval = Symbol('origZval');
+
 		const _FinalizationRegistry = globalThis.FinalizationRegistry || class { // Polyfill for cloudflare
 			register(){};
 			unregister(){};
@@ -557,7 +559,19 @@ PHP_MINIT_FUNCTION(vrzno)
 			return proxy;
 		});
 
-		Module.marshalZArray = (za => {
+		Module.marshalZArray = ((za, zv) => {
+			const nativeTargetId = Module.ccall(
+				'vrzno_expose_zval_target'
+				, 'number'
+				, ['number']
+				, [zv]
+			);
+
+			if(nativeTargetId)
+			{
+				return Module.targets.get(nativeTargetId);
+			}
+
 			const proxy = new Proxy({}, {
 				ownKeys: (target) => {
 					const keysLoc = Module.ccall(
@@ -579,7 +593,7 @@ PHP_MINIT_FUNCTION(vrzno)
 					return [];
 				},
 				has: (target, prop) => {
-					if(Number.isInteger(Number(prop)))
+					if(typeof prop === 'string' && Number.isInteger(Number(prop)))
 					{
 						prop = Number(prop);
 					}
@@ -616,7 +630,16 @@ PHP_MINIT_FUNCTION(vrzno)
 				},
 				get: (target, prop) => {
 					let retPtr;
-					if(Number.isInteger(Number(prop)))
+					if(prop === 'length')
+					{
+						return Module.ccall(
+							'vrzno_expose_array_length'
+							, 'number'
+							, ['number']
+							, [za]
+						);
+					}
+					if(typeof prop === 'string' && Number.isInteger(Number(prop)))
 					{
 						prop = Number(prop);
 					}
@@ -655,6 +678,9 @@ PHP_MINIT_FUNCTION(vrzno)
 
 					switch(typeof prop)
 					{
+						case 'symbol':
+							return Reflect.get(target, prop);
+							break;
 						case 'number':
 							retPtr = Module.ccall(
 								'vrzno_expose_dimension_pointer'
@@ -695,7 +721,18 @@ PHP_MINIT_FUNCTION(vrzno)
 					return proxy ?? Reflect.get(target, prop);
 				},
 				getOwnPropertyDescriptor: (target, prop) => {
-					if(Number.isInteger(Number(prop)))
+					if(prop === 'length')
+					{
+						const value = Module.ccall(
+							'vrzno_expose_array_length'
+							, 'number'
+							, ['number']
+							, [za]
+						);
+
+						return {...Object.getOwnPropertyDescriptor(target, prop), value};
+					}
+					if(typeof prop === 'string' && Number.isInteger(Number(prop)))
 					{
 						prop = Number(prop);
 					}
@@ -728,7 +765,7 @@ PHP_MINIT_FUNCTION(vrzno)
 							break;
 
 						default:
-							return false;
+							return undefined;
 					}
 
 					const proxy = Module.zvalToJS(retPtr);
@@ -738,6 +775,8 @@ PHP_MINIT_FUNCTION(vrzno)
 			});
 
 			Module.refcountRegistry.register(proxy, za, proxy);
+
+			proxy[origZval] = zv;
 
 			return proxy;
 		});
@@ -941,7 +980,7 @@ PHP_MINIT_FUNCTION(vrzno)
 						, ['number']
 						, [zv]
 					);
-					return Module.marshalZArray(za);
+					return Module.marshalZArray(za, zv);
 					break;
 
 				case IS_OBJECT:
@@ -990,17 +1029,29 @@ PHP_MINIT_FUNCTION(vrzno)
 			}
 			else if(value && ['function','object'].includes(typeof value))
 			{
+				if(value[origZval])
+				{
+					Module.ccall(
+						'vrzno_expose_zval_ref'
+						, 'number'
+						, ['number', 'number',]
+						, [rv, value[origZval]]
+					);
+					return;
+				}
+
 				const index = Module.targets.add(value);
 				const isFunction = typeof value === 'function' ? index : 0;
 				const isConstructor = isFunction && !!(value.prototype && value.prototype.constructor);
+				const isArray = Array.isArray(value);
 
 				Module.tacked.add(value);
 
 				Module.ccall(
 					'vrzno_expose_create_object_for_target'
 					, 'number'
-					, ['number', 'number', 'number', 'number']
-					, [index, isFunction, isConstructor, rv]
+					, ['number', 'number', 'number', 'number', 'number']
+					, [index, isFunction, isConstructor, isArray, rv]
 				);
 			}
 			else if(typeof value === 'number')
