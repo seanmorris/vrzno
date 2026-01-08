@@ -1,3 +1,5 @@
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
+
 __attribute__((weak)) int phpdbg_arm_auto_global(zval *ptrzv);
 
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
@@ -301,3 +303,5 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_files(void)
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 {
 }
+
+#endif
