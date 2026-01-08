@@ -37,6 +37,10 @@
 #include "vrzno_fetch.c"
 #include "vrzno_functions.c"
 
+#ifdef PHPDBG
+# include "vrzno_dbg.c"
+#endif
+
 /* For compatibility with older PHP versions */
 #ifndef ZEND_PARSE_PARAMETERS_NONE
 #define ZEND_PARSE_PARAMETERS_NONE() \
@@ -104,15 +108,18 @@ PHP_MINIT_FUNCTION(vrzno)
 	EM_ASM({
 		Module.hasVrzno = true;
 
-		const IS_UNDEF  = 0;
-		const IS_NULL   = 1;
-		const IS_FALSE  = 2;
-		const IS_TRUE   = 3;
-		const IS_LONG   = 4;
-		const IS_DOUBLE = 5;
-		const IS_STRING = 6;
-		const IS_ARRAY  = 7;
-		const IS_OBJECT = 8;
+		const IS_UNDEF    = 0;
+		const IS_NULL     = 1;
+		const IS_FALSE    = 2;
+		const IS_TRUE     = 3;
+		const IS_LONG     = 4;
+		const IS_DOUBLE   = 5;
+		const IS_STRING   = 6;
+		const IS_ARRAY    = 7;
+		const IS_OBJECT   = 8;
+		const IS_RESOURCE = 9;
+
+		const IS_INDIRECT = 12;
 
 		Module.tacked = new Set;
 
@@ -410,7 +417,7 @@ PHP_MINIT_FUNCTION(vrzno)
 						const keys = JSON.parse(keyJson);
 						_free(keysLoc);
 						keys.push(...Reflect.ownKeys(target));
-						return keys;
+						return [...new Set(keys)];
 					}
 
 					return [];
@@ -560,18 +567,6 @@ PHP_MINIT_FUNCTION(vrzno)
 		});
 
 		Module.marshalZArray = ((za, zv) => {
-			const nativeTargetId = Module.ccall(
-				'vrzno_expose_zval_target'
-				, 'number'
-				, ['number']
-				, [zv]
-			);
-
-			if(nativeTargetId)
-			{
-				return Module.targets.get(nativeTargetId);
-			}
-
 			const proxy = new Proxy({}, {
 				ownKeys: (target) => {
 					const keysLoc = Module.ccall(
@@ -587,7 +582,7 @@ PHP_MINIT_FUNCTION(vrzno)
 						const keys = JSON.parse(keyJson);
 						_free(keysLoc);
 						keys.push(...Reflect.ownKeys(target));
-						return keys;
+						return [...new Set(keys)];
 					}
 
 					return [];
@@ -858,6 +853,13 @@ PHP_MINIT_FUNCTION(vrzno)
 			return wrapped;
 		});
 
+		Module.resourceToJs = ((zr, zv) => {
+			const proxy = {[origZval]: zv};
+			Module.refcountRegistry.register(proxy, zr, proxy);
+			Object.freeze(proxy);
+			return proxy;
+		});
+
 		Module.zvalToJS = Module.zvalToJS || (zv => {
 			if(!zv)
 			{
@@ -883,12 +885,39 @@ PHP_MINIT_FUNCTION(vrzno)
 				return Module.targets.get(nativeTargetId);
 			}
 
-			const type = Module.ccall(
+			let type = Module.ccall(
 				'vrzno_expose_type'
 				, 'number'
 				, ['number']
 				, [zv]
 			);
+
+			if(type === IS_INDIRECT)
+			{
+				zv = Module.ccall(
+					'vrzno_expose_zval_direct'
+					, 'number'
+					, ['number']
+					, [zv]
+				);
+
+				// The indirect zval might have pointed to a reference
+				// Deref it again just in case.
+				zv = Module.ccall(
+					'vrzno_expose_zval_deref'
+					, 'number'
+					, ['number']
+					, [zv]
+				);
+
+				// Get the correct type of the zval
+				type = Module.ccall(
+					'vrzno_expose_type'
+					, 'number'
+					, ['number']
+					, [zv]
+				);
+			}
 
 			const zf = Module.ccall(
 				'vrzno_expose_callable'
@@ -993,7 +1022,23 @@ PHP_MINIT_FUNCTION(vrzno)
 					return Module.marshalZObject(zo);
 					break;
 
+				case IS_RESOURCE:
+					const zp = Module.ccall(
+						'vrzno_expose_resource'
+						, 'number'
+						, ['number']
+						, [zv]
+					);
+					return Module.resourceToJs(zp, zv);
+					break;
+
 				default:
+					console.warn(
+						'ZVal at 0x%s has invalid type %d (0b%s)'
+						, Number(zv).toString(16)
+						, type
+						, Number(type).toString(2)
+					);
 					return null;
 					break;
 			}

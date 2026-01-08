@@ -172,6 +172,11 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_deref(zval* zv)
 	return zv;
 }
 
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_direct(zval* zv)
+{
+	return Z_INDIRECT_P(zv);
+}
+
 void EMSCRIPTEN_KEEPALIVE vrzno_expose_zval_ref(zval* zv, zval* zvv)
 {
 	ZVAL_NEW_REF(zv, zvv);
@@ -261,6 +266,11 @@ zend_object* EMSCRIPTEN_KEEPALIVE vrzno_expose_object(zval *zv)
 zend_array* EMSCRIPTEN_KEEPALIVE vrzno_expose_array(zval *zv)
 {
 	return Z_ARR_P(zv);
+}
+
+zend_resource* EMSCRIPTEN_KEEPALIVE vrzno_expose_resource(zval *zv)
+{
+	return Z_RES_P(zv);
 }
 
 zend_object* EMSCRIPTEN_KEEPALIVE vrzno_expose_closure(zend_function *zf)
