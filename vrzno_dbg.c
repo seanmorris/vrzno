@@ -1,6 +1,6 @@
 __attribute__((weak)) int phpdbg_arm_auto_global(zval *ptrzv);
 
-EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_symbols(bool show_globals)
+char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 {
 	if(!EG(current_execute_data) || !EG(current_execute_data)->func)
 	{
@@ -12,7 +12,10 @@ EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_symbols(bool show_globals)
 
 	if(show_globals)
 	{
-		zend_hash_apply(CG(auto_globals), (apply_func_t) phpdbg_arm_auto_global);
+		if(phpdbg_arm_auto_global)
+		{
+			zend_hash_apply(CG(auto_globals), (apply_func_t) phpdbg_arm_auto_global);
+		}
 		symtable = &EG(symbol_table);
 	}
 	else if(!(symtable = zend_rebuild_symbol_table()))
@@ -75,7 +78,7 @@ EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_symbols(bool show_globals)
 	return output;
 }
 
-EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_constants(void)
+char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_constants(void)
 {
 	zend_constant *zc;
 	size_t count = 0;
@@ -125,7 +128,7 @@ EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_constants(void)
 	return output;
 }
 
-EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_classes(void)
+char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_classes(void)
 {
 	zend_class_entry *ce;
 	size_t count = 0;
@@ -189,7 +192,7 @@ EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_classes(void)
 	return output;
 }
 
-EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_functions(void)
+char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_functions(void)
 {
 	zend_function *zf;
 	size_t count = 0;
@@ -257,7 +260,7 @@ EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_functions(void)
 	return output;
 }
 
-EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_files(void)
+char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_files(void)
 {
 	zend_string *filename;
 	size_t count = 0;
@@ -295,6 +298,6 @@ EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_files(void)
 	return output;
 }
 
-EMSCRIPTEN_KEEPALIVE char * vrzno_dbg_dump_backtrace(void)
+char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 {
 }

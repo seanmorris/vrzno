@@ -36,10 +36,7 @@
 #include "vrzno_expose.c"
 #include "vrzno_fetch.c"
 #include "vrzno_functions.c"
-
-#ifdef PHPDBG
 # include "vrzno_dbg.c"
-#endif
 
 /* For compatibility with older PHP versions */
 #ifndef ZEND_PARSE_PARAMETERS_NONE
