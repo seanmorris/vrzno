@@ -1,5 +1,7 @@
 #if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 
+#include "zend_builtin_functions.h"
+
 __attribute__((weak)) int phpdbg_arm_auto_global(zval *ptrzv);
 
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
@@ -40,12 +42,15 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 
 			if(show_globals ? zend_is_auto_global(varName) : !zend_is_auto_global(varName))
 			{
-				len += sizeof(size_t) + ZSTR_LEN(varName) + 1 + sizeof(void*);
 				count++;
+				len += sizeof(void*)    // zval pointer
+					+ sizeof(size_t)    // name length
+					+ ZSTR_LEN(varName) // name
+					+ 1;                // NUL
 			}
 		} ZEND_HASH_FOREACH_END();
 
-		output = malloc(sizeof(count) + len);
+		output = malloc(sizeof(len) + len);
 		char *cur = output;
 
 		void *p = len;
@@ -92,12 +97,15 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_constants(void)
 		ZEND_HASH_MAP_FOREACH_PTR(EG(zend_constants), zc) {
 			if(ZEND_CONSTANT_MODULE_NUMBER(zc) == PHP_USER_CONSTANT)
 			{
-				len += sizeof(size_t) + ZSTR_LEN(zc->name) + 1 + sizeof(void*);
+				len += sizeof(void*)     // zval pointer
+					+ sizeof(size_t)     // name length
+					+ ZSTR_LEN(zc->name) // name
+					+ 1;                 // NUL
 				count++;
 			}
 		} ZEND_HASH_FOREACH_END();
 
-		output = malloc(sizeof(count) + len);
+		output = malloc(sizeof(len) + len);
 		char *cur = output;
 
 		void *p = len;
@@ -143,16 +151,17 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_classes(void)
 		{
 			if (ce->type != ZEND_USER_CLASS) continue;
 
-			len += sizeof(size_t)
+			count++;
+			len += sizeof(void*)
+				+ sizeof(size_t)
 				+ (ce->info.user.filename ? ZSTR_LEN(ce->info.user.filename) : 0) + 1
 				+ sizeof(size_t)
-				+ ZSTR_LEN(ce->name) + 1
-				+ sizeof(void*);
-			count++;
+				+ ZSTR_LEN(ce->name)
+				+ 1;
 
 		} ZEND_HASH_FOREACH_END();
 
-		output = malloc(sizeof(count) + len);
+		output = malloc(sizeof(len) + len);
 		char *cur = output;
 
 		void *p = len;
@@ -209,16 +218,15 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_functions(void)
 
 			zend_op_array *op_array = &zf->op_array;
 
+			count++;
 			len += sizeof(size_t)
 				+ (op_array->filename ? ZSTR_LEN(op_array->filename) : 0) + 1
 				+ sizeof(size_t)
 				+ ZSTR_LEN(op_array->function_name) + 1
 				+ sizeof(void*);
-			count++;
-
 		} ZEND_HASH_FOREACH_END();
 
-		output = malloc(sizeof(count) + len);
+		output = malloc(sizeof(len) + len);
 		char *cur = output;
 
 		void *p = len;
@@ -272,11 +280,11 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_files(void)
 	zend_try
 	{
 		ZEND_HASH_MAP_FOREACH_STR_KEY(&EG(included_files), filename) {
-			len += sizeof(size_t) + ZSTR_LEN(filename) + 1;
 			count++;
+			len += sizeof(size_t) + ZSTR_LEN(filename) + 1;
 		} ZEND_HASH_FOREACH_END();
 
-		output = malloc(sizeof(count) + len);
+		output = malloc(sizeof(len) + len);
 		char *cur = output;
 
 		void *p = len;
@@ -302,6 +310,109 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_files(void)
 
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 {
+	HashPosition position;
+	zval zbacktrace;
+
+	zval *tmp;
+	zval startLine, startFile;
+
+	const char *startFilename;
+	zval *file = &startFile, *line = &startLine;
+	int i = 0;
+
+	size_t count = 0;
+	size_t len = 0;
+	char *output = NULL;
+
+	zend_try
+	{
+		zend_fetch_debug_backtrace(&zbacktrace, 0, 0, 0);
+	}
+	zend_catch
+	{
+		fprintf(stderr, "Couldn't fetch backtrace, invalid data source: %s:%d\n", __FILE__, __LINE__);
+	} zend_end_try();
+
+	startFilename = zend_get_executed_filename();
+
+	Z_LVAL(startLine) = zend_get_executed_lineno();
+	Z_STR(startFile) = zend_string_init(startFilename, strlen(startFilename), 0);
+
+	zend_hash_internal_pointer_reset_ex(Z_ARRVAL(zbacktrace), &position);
+	tmp = zend_hash_get_current_data_ex(Z_ARRVAL(zbacktrace), &position);
+
+	while ((tmp = zend_hash_get_current_data_ex(Z_ARRVAL(zbacktrace), &position)))
+	{
+		count++;
+		len += sizeof(size_t)               // name length
+			+ (file ? Z_STRLEN_P(file) : 0) // name
+			+ 1                             // NUL
+			+ sizeof(uint32_t);             // line number
+
+		file = zend_hash_str_find(Z_ARRVAL_P(tmp), ZEND_STRL("file"));
+		zend_hash_move_forward_ex(Z_ARRVAL(zbacktrace), &position);
+	}
+
+	count++;
+	len += sizeof(size_t)               // name length
+		+ (file ? Z_STRLEN_P(file) : 0) // name
+		+ 1                             // NUL
+		+ sizeof(uint32_t);             // line number
+
+	output = malloc(sizeof(len) + len);
+	char *cur = output;
+
+	void *p = len;
+	memcpy(cur, &p, sizeof p);
+	cur += sizeof p;
+
+	zend_hash_internal_pointer_reset_ex(Z_ARRVAL(zbacktrace), &position);
+	tmp = zend_hash_get_current_data_ex(Z_ARRVAL(zbacktrace), &position);
+
+	file = &startFile;
+	line = &startLine;
+
+	while ((tmp = zend_hash_get_current_data_ex(Z_ARRVAL(zbacktrace), &position)))
+	{
+		if(file)
+		{
+			p = Z_STRLEN_P(file);
+			memcpy(cur, &p, sizeof p);
+			cur += sizeof p;
+
+			strcpy(cur, Z_STRVAL_P(file));
+			cur += Z_STRLEN_P(file) + 1;
+			i++;
+
+			p = (uint32_t)Z_LVAL_P(line);
+			memcpy(cur, &p, sizeof p);
+			cur += sizeof p;
+		}
+
+		file = zend_hash_str_find(Z_ARRVAL_P(tmp), ZEND_STRL("file"));
+		line = zend_hash_str_find(Z_ARRVAL_P(tmp), ZEND_STRL("line"));
+		zend_hash_move_forward_ex(Z_ARRVAL(zbacktrace), &position);
+	}
+
+	if(file)
+	{
+		p = Z_STRLEN_P(file);
+		memcpy(cur, &p, sizeof p);
+		cur += sizeof p;
+
+		strcpy(cur, Z_STRVAL_P(file));
+		cur += Z_STRLEN_P(file) + 1;
+		i++;
+
+		p = (uint32_t)Z_LVAL_P(line);
+		memcpy(cur, &p, sizeof p);
+		cur += sizeof p;
+	}
+
+	zval_ptr_dtor_nogc(&zbacktrace);
+	zend_string_release(Z_STR(startFile));
+
+	return output;
 }
 
 #endif
