@@ -1,6 +1,11 @@
+#include "sapi/phpdbg/phpdbg.h"
+#include "sapi/phpdbg/phpdbg_cmd.h"
 #include "zend_builtin_functions.h"
 
 __attribute__((weak)) int phpdbg_arm_auto_global(zval *ptrzv);
+__attribute__((weak)) void phpdbg_restore_frame(void);
+
+ZEND_EXTERN_MODULE_GLOBALS(phpdbg)
 
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 {
@@ -28,7 +33,6 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 
 	zend_string *varName;
 	zval *zv;
-	size_t count = 0;
 	size_t len = 0;
 	char *output = NULL;
 
@@ -44,7 +48,6 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 
 			if(show_globals ? zend_is_auto_global(varName) : !zend_is_auto_global(varName))
 			{
-				count++;
 				len += sizeof(void*)    // zval pointer
 					+ sizeof(size_t)    // name length
 					+ ZSTR_LEN(varName) // name
@@ -440,4 +443,64 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 	zend_string_release(Z_STR(startFile));
 
 	return output;
+}
+
+int EMSCRIPTEN_KEEPALIVE vrzno_dbg_switch_frame(int frame)
+{
+	if(!phpdbg_restore_frame)
+	{
+		fprintf(stderr, "Not running in PHPDPG SAPI.\n");
+		return -1;
+	}
+
+	if (PHPDBG_FRAME(num) == frame)
+	{
+		return PHPDBG_FRAME(num);
+	}
+
+	int oldFrame = PHPDBG_FRAME(num);
+
+	zend_execute_data *execute_data = PHPDBG_FRAME(num)
+		? PHPDBG_FRAME(execute_data)
+		: EG(current_execute_data);
+
+	int i = 0;
+
+	zend_try
+	{
+		while(execute_data)
+		{
+			if(i++ == frame)
+			{
+				break;
+			}
+
+			do
+			{
+				execute_data = execute_data->prev_execute_data;
+			} while(execute_data && execute_data->opline == NULL);
+		}
+	}
+	zend_catch
+	{
+		fprintf(stderr, "Couldn't switch frames, invalid data source: %s:%d\n", __FILE__, __LINE__);
+		return -1;
+	} zend_end_try();
+
+	if(execute_data == NULL)
+	{
+		fprintf(stderr, "No frame #%d\n", frame);
+		return -1;
+	}
+
+	phpdbg_restore_frame();
+
+	if(frame > 0)
+	{
+		PHPDBG_FRAME(num) = frame;
+		PHPDBG_FRAME(execute_data) = EG(current_execute_data);
+		EG(current_execute_data) = execute_data;
+	}
+
+	return oldFrame;
 }
