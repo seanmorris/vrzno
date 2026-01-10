@@ -1,5 +1,3 @@
-#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
-
 #include "zend_builtin_functions.h"
 
 __attribute__((weak)) int phpdbg_arm_auto_global(zval *ptrzv);
@@ -36,7 +34,11 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 
 	zend_try
 	{
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 		ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(symtable, varName, zv)
+#else
+		ZEND_HASH_FOREACH_STR_KEY_VAL(symtable, varName, zv)
+#endif
 		{
 			if(!varName) continue;
 
@@ -57,7 +59,11 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 		memcpy(cur, &p, sizeof p);
 		cur += sizeof p;
 
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 		ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(symtable, varName, zv)
+#else
+		ZEND_HASH_FOREACH_STR_KEY_VAL(symtable, varName, zv)
+#endif
 		{
 			if(!varName) continue;
 
@@ -88,20 +94,23 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_constants(void)
 {
 	zend_constant *zc;
-	size_t count = 0;
 	size_t len = 0;
 	char *output = NULL;
 
 	zend_try
 	{
-		ZEND_HASH_MAP_FOREACH_PTR(EG(zend_constants), zc) {
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
+		ZEND_HASH_MAP_FOREACH_PTR(EG(zend_constants), zc)
+#else
+		ZEND_HASH_FOREACH_PTR(EG(zend_constants), zc)
+#endif
+		{
 			if(ZEND_CONSTANT_MODULE_NUMBER(zc) == PHP_USER_CONSTANT)
 			{
 				len += sizeof(void*)     // zval pointer
 					+ sizeof(size_t)     // name length
 					+ ZSTR_LEN(zc->name) // name
 					+ 1;                 // NUL
-				count++;
 			}
 		} ZEND_HASH_FOREACH_END();
 
@@ -111,8 +120,12 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_constants(void)
 		void *p = len;
 		memcpy(cur, &p, sizeof p);
 		cur += sizeof p;
-
-		ZEND_HASH_MAP_FOREACH_PTR(EG(zend_constants), zc) {
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
+		ZEND_HASH_MAP_FOREACH_PTR(EG(zend_constants), zc)
+#else
+		ZEND_HASH_FOREACH_PTR(EG(zend_constants), zc)
+#endif
+		{
 			if(ZEND_CONSTANT_MODULE_NUMBER(zc) == PHP_USER_CONSTANT)
 			{
 				if(!zc->name) continue;
@@ -141,17 +154,19 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_constants(void)
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_classes(void)
 {
 	zend_class_entry *ce;
-	size_t count = 0;
 	size_t len = 0;
 	char *output = NULL;
 
 	zend_try
 	{
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 		ZEND_HASH_MAP_FOREACH_PTR(EG(class_table), ce)
+#else
+		ZEND_HASH_FOREACH_PTR(EG(class_table), ce)
+#endif
 		{
 			if (ce->type != ZEND_USER_CLASS) continue;
 
-			count++;
 			len += sizeof(void*)
 				+ sizeof(size_t)
 				+ (ce->info.user.filename ? ZSTR_LEN(ce->info.user.filename) : 0) + 1
@@ -168,7 +183,11 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_classes(void)
 		memcpy(cur, &p, sizeof p);
 		cur += sizeof p;
 
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 		ZEND_HASH_MAP_FOREACH_PTR(EG(class_table), ce)
+#else
+		ZEND_HASH_FOREACH_PTR(EG(class_table), ce)
+#endif
 		{
 			if (ce->type != ZEND_USER_CLASS) continue;
 
@@ -206,19 +225,21 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_classes(void)
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_functions(void)
 {
 	zend_function *zf;
-	size_t count = 0;
 	size_t len = 0;
 	char *output = NULL;
 
 	zend_try
 	{
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 		ZEND_HASH_MAP_FOREACH_PTR(EG(function_table), zf)
+#else
+		ZEND_HASH_FOREACH_PTR(EG(function_table), zf)
+#endif
 		{
 			if (zf->type != ZEND_USER_FUNCTION) continue;
 
 			zend_op_array *op_array = &zf->op_array;
 
-			count++;
 			len += sizeof(size_t)
 				+ (op_array->filename ? ZSTR_LEN(op_array->filename) : 0) + 1
 				+ sizeof(size_t)
@@ -233,7 +254,11 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_functions(void)
 		memcpy(cur, &p, sizeof p);
 		cur += sizeof p;
 
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 		ZEND_HASH_MAP_FOREACH_PTR(EG(function_table), zf)
+#else
+		ZEND_HASH_FOREACH_PTR(EG(function_table), zf)
+#endif
 		{
 			if (zf->type != ZEND_USER_FUNCTION) continue;
 
@@ -273,14 +298,17 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_functions(void)
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_files(void)
 {
 	zend_string *filename;
-	size_t count = 0;
 	size_t len = 0;
 	char *output = NULL;
 
 	zend_try
 	{
-		ZEND_HASH_MAP_FOREACH_STR_KEY(&EG(included_files), filename) {
-			count++;
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
+		ZEND_HASH_MAP_FOREACH_STR_KEY(&EG(included_files), filename)
+#else
+		ZEND_HASH_FOREACH_STR_KEY(&EG(included_files), filename)
+#endif
+		{
 			len += sizeof(size_t) + ZSTR_LEN(filename) + 1;
 		} ZEND_HASH_FOREACH_END();
 
@@ -291,7 +319,12 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_files(void)
 		memcpy(cur, &p, sizeof p);
 		cur += sizeof p;
 
-		ZEND_HASH_MAP_FOREACH_STR_KEY(&EG(included_files), filename) {
+#if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
+		ZEND_HASH_MAP_FOREACH_STR_KEY(&EG(included_files), filename)
+#else
+		ZEND_HASH_FOREACH_STR_KEY(&EG(included_files), filename)
+#endif
+		{
 			p = ZSTR_LEN(filename);
 			memcpy(cur, &p, sizeof p);
 			cur += sizeof p;
@@ -318,9 +351,7 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 
 	const char *startFilename;
 	zval *file = &startFile, *line = &startLine;
-	int i = 0;
 
-	size_t count = 0;
 	size_t len = 0;
 	char *output = NULL;
 
@@ -343,7 +374,6 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 
 	while ((tmp = zend_hash_get_current_data_ex(Z_ARRVAL(zbacktrace), &position)))
 	{
-		count++;
 		len += sizeof(size_t)               // name length
 			+ (file ? Z_STRLEN_P(file) : 0) // name
 			+ 1                             // NUL
@@ -353,7 +383,6 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 		zend_hash_move_forward_ex(Z_ARRVAL(zbacktrace), &position);
 	}
 
-	count++;
 	len += sizeof(size_t)               // name length
 		+ (file ? Z_STRLEN_P(file) : 0) // name
 		+ 1                             // NUL
@@ -382,7 +411,6 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 
 			strcpy(cur, Z_STRVAL_P(file));
 			cur += Z_STRLEN_P(file) + 1;
-			i++;
 
 			p = (uint32_t)Z_LVAL_P(line);
 			memcpy(cur, &p, sizeof p);
@@ -402,7 +430,6 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 
 		strcpy(cur, Z_STRVAL_P(file));
 		cur += Z_STRLEN_P(file) + 1;
-		i++;
 
 		p = (uint32_t)Z_LVAL_P(line);
 		memcpy(cur, &p, sizeof p);
@@ -414,5 +441,3 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_backtrace(void)
 
 	return output;
 }
-
-#endif
