@@ -4,8 +4,7 @@
 
 __attribute__((weak)) int phpdbg_arm_auto_global(zval *ptrzv);
 __attribute__((weak)) void phpdbg_restore_frame(void);
-
-ZEND_EXTERN_MODULE_GLOBALS(phpdbg)
+__attribute__((weak)) ZEND_EXTERN_MODULE_GLOBALS(phpdbg);
 
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 {
@@ -453,7 +452,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_dbg_switch_frame(int frame)
 		return -1;
 	}
 
-	if (PHPDBG_FRAME(num) == frame)
+	if(PHPDBG_FRAME(num) == frame)
 	{
 		return PHPDBG_FRAME(num);
 	}
