@@ -14,6 +14,16 @@ ZEND_TSRMLS_CACHE_EXTERN()
 
 #include <stdbool.h>
 
+#if PHP_VERSION_ID < 80100
+# define GC_TRY_DELREF(p) do { \
+	if (!(GC_FLAGS(p) & GC_IMMUTABLE)) { \
+		GC_DELREF(p); \
+	} \
+} while (0)
+#endif
+
+#define VRZNO_ZEND_IS_ITERABLE(zv) zend_is_iterable((zval *)(zv))
+
 // Used as `jstarget *`, but aren't actually pointers.
 // Actually "points" to an object in Module.targets.
 # define jstarget void

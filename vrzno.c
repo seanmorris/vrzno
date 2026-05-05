@@ -51,6 +51,8 @@ PHP_RSHUTDOWN_FUNCTION(vrzno)
 		Module.tacked.clear();
 		Module.classes = new WeakMap();
 		Module._classes = new Module.WeakerMap();
+		Module._objects = new Module.WeakerMap();
+		Module._arrays = new Module.WeakerMap();
 		Module.callables = new WeakMap;
 		Module._callables = new Module.WeakerMap();
 
@@ -399,6 +401,11 @@ PHP_MINIT_FUNCTION(vrzno)
 				return Module.targets.get(nativeTargetId);
 			}
 
+			if(Module._objects.has(zo))
+			{
+				return Module._objects.get(zo);
+			}
+
 			const proxy = new Proxy({}, {
 				ownKeys: (target) => {
 					const keysLoc = Module.ccall(
@@ -559,11 +566,17 @@ PHP_MINIT_FUNCTION(vrzno)
 			});
 
 			Module.refcountRegistry.register(proxy, zo, proxy);
+			Module._objects.set(zo, proxy);
 
 			return proxy;
 		});
 
 		Module.marshalZArray = ((za, zv) => {
+			if(Module._arrays.has(za))
+			{
+				return Module._arrays.get(za);
+			}
+
 			const proxy = new Proxy({}, {
 				ownKeys: (target) => {
 					const keysLoc = Module.ccall(
@@ -767,6 +780,7 @@ PHP_MINIT_FUNCTION(vrzno)
 			});
 
 			Module.refcountRegistry.register(proxy, za, proxy);
+			Module._arrays.set(za, proxy);
 
 			proxy[origZval] = zv;
 
@@ -1227,6 +1241,8 @@ PHP_MINIT_FUNCTION(vrzno)
 
 		Module.classes = new WeakMap();
 		Module._classes = new Module.WeakerMap();
+		Module._objects = new Module.WeakerMap();
+		Module._arrays = new Module.WeakerMap();
 
 		Module.targets = new Module.UniqueIndex;
 

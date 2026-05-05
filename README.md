@@ -3,7 +3,7 @@
 
 VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense. It lets you pass objects, arrays, callbacks, and classes between PHP & Javascript, as well as scalar values.
 
-Vrzno requires PHP 8.1+
+Vrzno requires PHP 8.0+
 
 *NOTE: The PDO Connectors have been moved into their own extensions:*
 

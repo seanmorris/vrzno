@@ -307,5 +307,5 @@ zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_pointer(zend_object *zo,
 
 bool EMSCRIPTEN_KEEPALIVE vrzno_expose_is_iterable(const zval *zo)
 {
-	return zend_is_iterable(zo);
+	return VRZNO_ZEND_IS_ITERABLE(zo);
 }
