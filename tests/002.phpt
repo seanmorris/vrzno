@@ -1,5 +1,5 @@
 --TEST--
-vrzno_test1() Basic test
+Legacy Vrzno helpers remain supported
 --SKIPIF--
 <?php
 if (!extension_loaded('vrzno')) {
@@ -8,10 +8,10 @@ if (!extension_loaded('vrzno')) {
 ?>
 --FILE--
 <?php
-$ret = vrzno_test1();
-
-var_dump($ret);
+echo vrzno_eval('1 + 2'), "\n";
+vrzno_eval('globalThis.__vrzno_phpt_sum = (left, right) => left + right');
+echo vrzno_run('__vrzno_phpt_sum', [2, 3]), "\n";
 ?>
 --EXPECT--
-The extension vrzno is loaded and working!
-NULL
+3
+5

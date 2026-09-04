@@ -1,3 +1,5 @@
+#include "vrzno_private.h"
+
 #include "sapi/phpdbg/phpdbg.h"
 #include "sapi/phpdbg/phpdbg_cmd.h"
 #include "zend_builtin_functions.h"

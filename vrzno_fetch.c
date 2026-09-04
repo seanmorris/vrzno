@@ -1,5 +1,7 @@
+#include "vrzno_private.h"
+
 typedef struct {
-	jstarget* targetId;
+	vrzno_target_id targetId;
 	size_t fpos;
 } php_stream_fetch_data;
 
@@ -7,7 +9,7 @@ static ssize_t php_stream_fetch_read(php_stream *stream, char *buf, size_t count
 {
 	php_stream_fetch_data *self = (php_stream_fetch_data*)stream->abstract;
 
-	ssize_t read = EM_ASM_PTR({
+	ssize_t read = EM_ASM_INT({
 		const target = Module.targets.get($0);
 		const dest = $1;
 		const fpos = $2;
@@ -46,8 +48,7 @@ static int php_stream_fetch_close(php_stream *stream, int close_handle)
 	php_stream_fetch_data *self = (php_stream_fetch_data*)stream->abstract;
 
 	EM_ASM({
-		const parsed = Module.targets.get($0);
-		Module.tacked.delete(parsed);
+		Module.targets.remove($0);
 	}, self->targetId);
 
 	efree(self);
@@ -67,15 +68,15 @@ const php_stream_ops php_stream_fetch_io_ops = {
 	NULL  /* set_option */
 };
 
-EM_ASYNC_JS(ssize_t, php_stream_fetch_real_open, (
+EM_ASYNC_JS(vrzno_target_id, php_stream_fetch_real_open, (
 	const char *path,
-	jstarget *_context,
+	vrzno_target_id context_id,
 	size_t ptrsize,
 	char ***headersv,
 	size_t *headersc
 ), {
 	const pathString = UTF8ToString(path);
-	const context = Module.targets.get(_context) || {};
+	const context = Module.targets.get(context_id) || {ignoreErrors: false};
 
 	try
 	{
@@ -102,14 +103,21 @@ EM_ASYNC_JS(ssize_t, php_stream_fetch_real_open, (
 
 		const parsed = {status, buffer, context};
 		Module.tacked.add(parsed);
-		Module.tacked.delete(context);
+		if(context_id)
+		{
+			Module.targets.remove(context_id);
+		}
 		return Module.targets.add(parsed);
 	}
 	catch(error)
 	{
-		const parsed = {status: -1, buffer: new TextEncoder().encode(error), context};
+		const message = error && error.message ? error.message : String(error);
+		const parsed = {status: -1, buffer: new TextEncoder().encode(message), context, error: message};
 		Module.tacked.add(parsed);
-		Module.tacked.delete(context);
+		if(context_id)
+		{
+			Module.targets.remove(context_id);
+		}
 		return Module.targets.add(parsed);
 	}
 });
@@ -128,7 +136,7 @@ php_stream *php_stream_fetch_open(
 	}
 
 	zval *tmpzval;
-	jstarget *contextId = NULL;
+	vrzno_target_id contextId = 0;
 	bool ignoreErrors = false;
 	if(context)
 	{
@@ -140,11 +148,14 @@ php_stream *php_stream_fetch_open(
 
 		if((tmpzval = php_stream_context_get_option(context, "http", "method")) != NULL)
 		{
-			EM_ASM({ {
+			if(Z_TYPE_P(tmpzval) == IS_STRING)
+			{
+				EM_ASM({ {
 				const context = Module.targets.get($0);
 				const method = UTF8ToString($1);
 				context.method = method;
-			} }, contextId, Z_STRVAL_P(tmpzval));
+				} }, contextId, Z_STRVAL_P(tmpzval));
+			}
 		}
 
 		if((tmpzval = php_stream_context_get_option(context, "http", "header")) != NULL)
@@ -159,6 +170,7 @@ php_stream *php_stream_fetch_open(
 							const context = Module.targets.get($0);
 							const headerLine = UTF8ToString($1);
 							const colon = headerLine.indexOf(':');
+							if(colon < 1) return;
 
 							const key = headerLine.substr(0, colon).trim();
 							const val = headerLine.substr(1 + colon).trim();
@@ -175,9 +187,10 @@ php_stream *php_stream_fetch_open(
 					const context = Module.targets.get($0);
 					const headerLines = UTF8ToString($1);
 
-					headerLines.split('\n').forEach(headerLine => {
-						const context = Module.targets.get($0);
+					headerLines.split(String.fromCharCode(10)).forEach(headerLine => {
+						headerLine = headerLine.replace(String.fromCharCode(13), String());
 						const colon = headerLine.indexOf(':');
+						if(colon < 1) return;
 
 						const key = headerLine.substr(0, colon).trim();
 						const val = headerLine.substr(1 + colon).trim();
@@ -191,10 +204,13 @@ php_stream *php_stream_fetch_open(
 
 		if((tmpzval = php_stream_context_get_option(context, "http", "content")) != NULL)
 		{
-			EM_ASM({ (() => {
+			if(Z_TYPE_P(tmpzval) == IS_STRING)
+			{
+				EM_ASM({ (() => {
 				const context = Module.targets.get($0);
 				context.body = Module.HEAPU8.slice($1, $1 + $2);
-			})() }, contextId, Z_STRVAL_P(tmpzval), Z_STRLEN_P(tmpzval));
+				})() }, contextId, Z_STRVAL_P(tmpzval), Z_STRLEN_P(tmpzval));
+			}
 		}
 
 		if((tmpzval = php_stream_context_get_option(context, "http", "ignore_errors")) != NULL)
@@ -218,47 +234,64 @@ php_stream *php_stream_fetch_open(
 	self->fpos = 0;
 	self->targetId = php_stream_fetch_real_open(path, contextId, sizeof(char*), &headersv, &headersc);
 
-	php_stream_notify_info(context, PHP_STREAM_NOTIFY_CONNECT, NULL, 0);
+	if(context)
+	{
+		php_stream_notify_info(context, PHP_STREAM_NOTIFY_CONNECT, NULL, 0);
+	}
 
 	int status = EM_ASM_INT({ {
 		const parsed = Module.targets.get($0);
-		if(parsed.status < 0)
-		{
-			Module.tacked.delete(parsed);
-		}
 		return parsed.status;
 	} }, self->targetId);
 
-	if(!ignoreErrors)
+	bool failed = status < 0 || (!ignoreErrors && status >= 400);
+
+	if(failed)
 	{
 		if(status == 403)
 		{
-			php_stream_notify_error(context, PHP_STREAM_NOTIFY_AUTH_RESULT, "HTTP 403 Auth Error!", status);
+			if(context)
+			{
+				php_stream_notify_error(context, PHP_STREAM_NOTIFY_AUTH_RESULT, "HTTP 403 Auth Error", status);
+			}
+			php_stream_wrapper_log_error(wrapper, options, "HTTP request failed with status 403");
 		}
 		else if(status >= 400 && status < 500)
 		{
-			php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "HTTP 4XX Error!", status);
-			php_stream_wrapper_log_error(wrapper, options, "HTTP %d Error!", status);
+			if(context)
+			{
+				php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "HTTP client error", status);
+			}
+			php_stream_wrapper_log_error(wrapper, options, "HTTP request failed with status %d", status);
 		}
 		else if(status >= 500 && status < 600)
 		{
-			php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "HTTP 5XX Error!", status);
-			php_stream_wrapper_log_error(wrapper, options, "HTTP %d Error!", status);
+			if(context)
+			{
+				php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "HTTP server error", status);
+			}
+			php_stream_wrapper_log_error(wrapper, options, "HTTP request failed with status %d", status);
 		}
 		else if(status >= 600)
 		{
-			php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "HTTP UNKNOWN Error!", status);
-			php_stream_wrapper_log_error(wrapper, options, "HTTP %d Error!", status);
+			if(context)
+			{
+				php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "Unknown HTTP error", status);
+			}
+			php_stream_wrapper_log_error(wrapper, options, "HTTP request failed with status %d", status);
 		}
-		else if(status == -1)
+		else
 		{
-			php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "Unexpected HTTP Error: %d", status);
-			php_stream_wrapper_log_error(wrapper, options, "Unexpected HTTP Error: %d", status);
+			if(context)
+			{
+				php_stream_notify_error(context, PHP_STREAM_NOTIFY_FAILURE, "JavaScript fetch failed", status);
+			}
+			php_stream_wrapper_log_error(wrapper, options, "JavaScript fetch failed");
 		}
 	}
 
-	zval *response_header = NULL;
-	array_init(response_header);
+	zval response_header;
+	array_init(&response_header);
 
 	for(int i = 0; i < headersc; i++)
 	{
@@ -267,7 +300,7 @@ php_stream *php_stream_fetch_open(
 			zval http_response;
 			char *line = headersv[i];
 			ZVAL_STRINGL(&http_response, line, strlen(line));
-			zend_hash_next_index_insert(Z_ARRVAL_P(response_header), &http_response);
+			zend_hash_next_index_insert(Z_ARRVAL(response_header), &http_response);
 		}
 
 		free(headersv[i]); // malloc()'d in php_stream_fetch_real_open
@@ -275,25 +308,51 @@ php_stream *php_stream_fetch_open(
 
 	free(headersv); // malloc()'d in php_stream_fetch_real_open
 
-	if(status == -1)
+	if(failed)
 	{
+		if(FAILURE == zend_set_local_var_str(
+			"http_response_header",
+			sizeof("http_response_header") - 1,
+			&response_header,
+			0
+		))
+		{
+			zval_ptr_dtor(&response_header);
+		}
+		EM_ASM({ Module.targets.remove($0); }, self->targetId);
+		efree(self);
 		return NULL;
 	}
 
 	stream = php_stream_alloc(&php_stream_fetch_io_ops, self, NULL, mode);
+	if(!stream)
+	{
+		zval_ptr_dtor(&response_header);
+		EM_ASM({ Module.targets.remove($0); }, self->targetId);
+		efree(self);
+		return NULL;
+	}
 
-	ZVAL_COPY(&stream->wrapperdata, response_header);
+	ZVAL_COPY(&stream->wrapperdata, &response_header);
 
-	zend_set_local_var_str(
+	if(FAILURE == zend_set_local_var_str(
 		"http_response_header",
-		-1 + sizeof("http_response_header"),
-		&stream->wrapperdata,
+		sizeof("http_response_header") - 1,
+		&response_header,
 		0
-	);
+	))
+	{
+		zval_ptr_dtor(&response_header);
+	}
 
 	stream->flags |= PHP_STREAM_FLAG_NO_BUFFER;
 	stream->flags |= PHP_STREAM_FLAG_NO_SEEK;
 	stream->eof = 0;
+
+	if(opened_path)
+	{
+		*opened_path = zend_string_init(path, strlen(path), 0);
+	}
 
 	return stream;
 }

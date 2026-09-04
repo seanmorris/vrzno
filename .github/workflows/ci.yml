@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: PHP ${{ matrix.php-version }} / wasm32
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['8.0', '8.5']
+
+    steps:
+      - name: Check out Vrzno
+        uses: actions/checkout@v6
+        with:
+          path: vrzno
+
+      - name: Check out the php-wasm integration baseline
+        uses: actions/checkout@v6
+        with:
+          repository: seanmorris/php-wasm
+          ref: 2c176adf9fc65ad70471e6c5d424df2524b49772
+          path: php-wasm
+
+      - name: Configure php-wasm
+        working-directory: php-wasm
+        run: |
+          cp ".circleci/.env_${{ matrix.php-version }}.ci" .env
+          npm ci
+
+      - name: Build the Emscripten image
+        working-directory: php-wasm
+        run: make image
+
+      - name: Build PHP with this Vrzno checkout
+        working-directory: php-wasm
+        run: >-
+          make -j2 node-mjs
+          PHP_VERSION=${{ matrix.php-version }}
+          WITH_ICONV=0
+          WITH_YAML=0
+          WITH_VRZNO=1
+          VRZNO_DEV_PATH="${GITHUB_WORKSPACE}/vrzno"
+
+      - name: Run the integration smoke test
+        working-directory: vrzno
+        env:
+          PHP_VERSION: ${{ matrix.php-version }}
+          PHP_WASM_ROOT: ${{ github.workspace }}/php-wasm
+        run: node --test tests/integration.mjs

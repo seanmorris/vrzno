@@ -6,34 +6,24 @@
 extern zend_module_entry vrzno_module_entry;
 # define phpext_vrzno_ptr &vrzno_module_entry
 
-# define PHP_VRZNO_VERSION "0.1.0"
+# define PHP_VRZNO_VERSION "0.2.0"
 
 # if defined(ZTS) && defined(COMPILE_DL_VRZNO)
 ZEND_TSRMLS_CACHE_EXTERN()
 # endif
 
 #include <stdbool.h>
+#include <stdint.h>
 
-#if PHP_VERSION_ID < 80100
-# define GC_TRY_DELREF(p) do { \
-	if (!(GC_FLAGS(p) & GC_IMMUTABLE)) { \
-		GC_DELREF(p); \
-	} \
-} while (0)
-#endif
+/* JavaScript values are addressed through Module.targets, not Wasm pointers. */
+typedef uint32_t vrzno_target_id;
 
-#define VRZNO_ZEND_IS_ITERABLE(zv) zend_is_iterable((zval *)(zv))
-
-// Used as `jstarget *`, but aren't actually pointers.
-// Actually "points" to an object in Module.targets.
-# define jstarget void
+/* Kept for extensions built against the pre-0.2 target-handle spelling. */
+typedef void jstarget;
 
 typedef struct {
+	vrzno_target_id targetId;
 	zend_object zo;
-	long isArray;
-	long isFunction;
-	bool isConstructor;
-	jstarget *targetId;
 } vrzno_object;
 
 vrzno_object* vrzno_fetch_object(zend_object *obj);
@@ -52,10 +42,7 @@ PHP_METHOD(Vrzno, __get);
 PHP_METHOD(Vrzno, __call);
 PHP_METHOD(Vrzno, __invoke);
 PHP_METHOD(Vrzno, __construct);
-PHP_METHOD(Vrzno, __destruct);
 PHP_METHOD(Vrzno, __toString);
-
-static zend_object_iterator *vrzno_array_get_iterator(zend_class_entry *ce, zval *zv, int by_ref);
 
 # define VRZNO_ICON_DATA_URI "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAwCAYAAABT9ym6AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH5AgXBycOhI1eNAAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAACQklEQVRo3u2asUvDUBDGv0hBwdmhlFQQHLt0EyrFRUQ6FDuUujh1KggO4pIxIOKgiJ38A4pDS0Hp0KUUBTcXR8HBULoLgrrEwZw2R17yDI2Vl35T07x3vN7v3d27pBpCStd1GxHIsiwtzLwZKKJEWALJZDKqNdlhCClDRJMlESEBl2q1muvaMAwpMuoT+WsSIiKyZNQlQiRM0wQA1Ov1iRAQSURGvTrCSfw30c4YiVl7lEz8KvukYmJ61hJ5MOrsFRQb8SVCHuB7OSyZqGIifjHyW88Ph8Ox9ClhYzG+dUTULzxfHgEA0uUDTOKEMK3snASJkyGJCI2rPqnXj8h2hJSdOIkgiWInbHY83dkAAJTMC7VOv1rTqNoAsLW55vIckSEP8BgIKx47JNn6w3dEq9NTPGvxrMMJ7DbufA2eVVZ875M9bqfdbvuSCYpN9etIsVj09Ny6PgsAKOSynvNovIiM6D5di2KU1hPfyk6e71rvUiQajw8uz3LP0zXZofGV5YxvjBIJmqc+EaqMTfZegupK1/GkiATp6rr/5eG9jG+WIzvbJ+ee40XZjeZR3SApV9kT/JeRfgjNSRlaTC9IxVrQeJGIBF9nrPoRzfGoLVMfDktlz+z0HVu39yyblX0Xxu18vLzF441VYIdYyGU1x6O2zFlLVG9EZCTsaF7ZSv0OUaSmUaWPrr4lao0Q0JxsFXMix/k8AGA1lXJ9P1iaj5QMkUg9vbrWdjMYAAD2+/3pcy2XyFOtTi+SfwdxErJShsgnw04E9v7JwL4AAAAASUVORK5CYII="
 

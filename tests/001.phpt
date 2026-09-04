@@ -1,5 +1,5 @@
 --TEST--
-Check if vrzno is loaded
+Check Vrzno extension metadata
 --SKIPIF--
 <?php
 if (!extension_loaded('vrzno')) {
@@ -8,7 +8,11 @@ if (!extension_loaded('vrzno')) {
 ?>
 --FILE--
 <?php
-echo 'The extension "vrzno" is available';
+echo phpversion('vrzno'), "\n";
+echo class_exists('Vrzno') ? "class\n" : "missing\n";
+echo (new ReflectionFunction('vrzno_timeout'))->getReturnType(), "\n";
 ?>
 --EXPECT--
-The extension "vrzno" is available
+0.2.0
+class
+void

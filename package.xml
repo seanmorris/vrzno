@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package packagerversion="1.10.13" version="2.0"
+         xmlns="http://pear.php.net/dtd/package-2.0"
+         xmlns:tasks="http://pear.php.net/dtd/tasks-1.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pear.php.net/dtd/tasks-1.0 http://pear.php.net/dtd/tasks-1.0.xsd http://pear.php.net/dtd/package-2.0 http://pear.php.net/dtd/package-2.0.xsd">
+ <name>vrzno</name>
+ <channel>pecl.php.net</channel>
+ <summary>JavaScript bridge for PHP running under Emscripten</summary>
+ <description>Vrzno bridges PHP values, objects, arrays, callbacks, classes, promises, and fetch streams with JavaScript in php-wasm runtimes.</description>
+ <lead>
+  <name>Sean Morris</name>
+  <user>seanmorris</user>
+  <email>640101+seanmorris@users.noreply.github.com</email>
+  <active>yes</active>
+ </lead>
+ <date>2026-09-04</date>
+ <time>00:00:00</time>
+ <version>
+  <release>0.2.0</release>
+  <api>0.2.0</api>
+ </version>
+ <stability>
+  <release>beta</release>
+  <api>beta</api>
+ </stability>
+ <license uri="https://www.apache.org/licenses/LICENSE-2.0">Apache-2.0</license>
+ <notes>Defines stable null and error semantics, repairs value ownership, and supports PHP 8.0 through 8.5 on Emscripten wasm32.</notes>
+ <contents>
+  <dir name="/">
+   <file name="CHANGELOG.md" role="doc" />
+   <file name="CREDITS" role="doc" />
+   <file name="LICENSE" role="doc" />
+   <file name="README.md" role="doc" />
+   <file name="banner.jpg" role="doc" />
+   <file name="config.m4" role="src" />
+   <file name="php_vrzno.h" role="src" />
+   <file name="vrzno.c" role="src" />
+   <file name="vrzno.stub.php" role="src" />
+   <file name="vrzno_arginfo.h" role="src" />
+   <file name="vrzno_array.c" role="src" />
+   <file name="vrzno_dbg.c" role="src" />
+   <file name="vrzno_expose.c" role="src" />
+   <file name="vrzno_fetch.c" role="src" />
+   <file name="vrzno_functions.c" role="src" />
+   <file name="vrzno_object.c" role="src" />
+   <file name="vrzno_private.h" role="src" />
+   <dir name="tests">
+    <file name="001.phpt" role="test" />
+    <file name="002.phpt" role="test" />
+    <file name="integration.mjs" role="test" />
+   </dir>
+  </dir>
+ </contents>
+ <dependencies>
+  <required>
+   <php>
+    <min>8.0.0</min>
+    <max>8.5.99</max>
+   </php>
+   <pearinstaller>
+    <min>1.10.13</min>
+   </pearinstaller>
+  </required>
+ </dependencies>
+ <providesextension>vrzno</providesextension>
+ <extsrcrelease>
+  <configureoption name="enable-vrzno" prompt="Enable Vrzno support?" default="yes" />
+ </extsrcrelease>
+</package>

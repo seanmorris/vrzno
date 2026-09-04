@@ -1,66 +1,24 @@
 /* vrzno extension for PHP */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
-#include <emscripten.h>
-
-#include "php.h"
-#include "php_ini.h"
-
-#include "SAPI.h"
-
-#include "ext/standard/info.h"
-#include "ext/standard/php_var.h"
-#include "../json/php_json.h"
-#include "../json/php_json_encoder.h"
-#include "../json/php_json_parser.h"
-
-#include "zend_API.h"
-#include "zend_alloc.h"
-#include "zend_types.h"
-#include "zend_closures.h"
-#include "zend_hash.h"
-#include "zend_errors.h"
-
-#if PHP_MAJOR_VERSION >= 8
-# include "zend_attributes.h"
-#else
-# include <stdbool.h>
-#endif
-
-#include "php_vrzno.h"
-#include "vrzno_object.c"
-#include "vrzno_array.c"
-#include "vrzno_expose.c"
-#include "vrzno_fetch.c"
-#include "vrzno_functions.c"
-# include "vrzno_dbg.c"
-
-/* For compatibility with older PHP versions */
-#ifndef ZEND_PARSE_PARAMETERS_NONE
-#define ZEND_PARSE_PARAMETERS_NONE() \
-	ZEND_PARSE_PARAMETERS_START(0, 0) \
-	ZEND_PARSE_PARAMETERS_END()
-#endif
+#include "vrzno_private.h"
+#include "vrzno_arginfo.h"
 
 PHP_RSHUTDOWN_FUNCTION(vrzno)
 {
 	EM_ASM({
+		if(Module.ownedZvalRegistry)
+		{
+			Module.ownedZvalRegistry.releaseAll();
+		}
+
+		Module.vrznoGeneration++;
 		Module.tacked.clear();
 		Module.classes = new WeakMap();
 		Module._classes = new Module.WeakerMap();
 		Module._objects = new Module.WeakerMap();
 		Module._arrays = new Module.WeakerMap();
-		Module.callables = new WeakMap;
-		Module._callables = new Module.WeakerMap();
-
-		const refcounted = [...Module.refcountRegistry.registered.entries()];
-		const heaped = [...Module.heapRegistry.registered.entries()];
-
-		refcounted.forEach(([gc, unregisterToken]) => Module.refcountRegistry.unregister(unregisterToken));
-		heaped.forEach(([gc, unregisterToken]) => Module.heapRegistry.unregister(unregisterToken));
+		Module.targets.clear();
+		Module.targets.add(globalThis);
 	});
 
 	return SUCCESS;
@@ -70,11 +28,18 @@ PHP_MINIT_FUNCTION(vrzno)
 {
 	zend_class_entry ce;
 
-	INIT_CLASS_ENTRY(ce, "Vrzno", vrzno_vrzno_methods);
+	INIT_CLASS_ENTRY(ce, "Vrzno", class_Vrzno_methods);
 	vrzno_class_entry = zend_register_internal_class(&ce);
 
 	vrzno_class_entry->create_object = vrzno_create_object;
 	vrzno_class_entry->get_iterator  = vrzno_array_get_iterator;
+
+#if PHP_VERSION_ID >= 80100
+	vrzno_class_entry->ce_flags |= ZEND_ACC_NOT_SERIALIZABLE;
+#else
+	vrzno_class_entry->serialize = zend_class_serialize_deny;
+	vrzno_class_entry->unserialize = zend_class_unserialize_deny;
+#endif
 
 #if PHP_MAJOR_VERSION >= 8 && PHP_MINOR_VERSION >= 2
 	vrzno_class_entry->ce_flags |= ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES;
@@ -84,6 +49,8 @@ PHP_MINIT_FUNCTION(vrzno)
 #endif
 
 	memcpy(&vrzno_object_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
+	vrzno_object_handlers.offset = XtOffsetOf(vrzno_object, zo);
+	vrzno_object_handlers.clone_obj = NULL;
 
 	vrzno_object_handlers.get_properties_for = vrzno_get_properties_for;
 	vrzno_object_handlers.unset_property     = vrzno_unset_property;
@@ -120,9 +87,46 @@ PHP_MINIT_FUNCTION(vrzno)
 
 		const IS_INDIRECT = 12;
 
+		Module.vrznoGeneration = (Module.vrznoGeneration || 0) + 1;
 		Module.tacked = new Set;
+		Module.vrznoArrayView = target => {
+			if(target instanceof ArrayBuffer)
+			{
+				if(!Module.bufferMaps.has(target))
+				{
+					Module.bufferMaps.set(target, new Uint8Array(target));
+				}
+
+				return Module.bufferMaps.get(target);
+			}
+
+			return target;
+		};
+		Module.vrznoPhpTruthy = value => !(
+			value === undefined
+			|| value === null
+			|| value === false
+			|| value === 0
+			|| (typeof value === 'string' && value.length === 0)
+			|| value === '0'
+		);
+		Module.vrznoNormalizeArrayKey = key => {
+			if(typeof key !== 'string')
+			{
+				return key;
+			}
+
+			const numericKey = Number(key);
+			return Number.isInteger(numericKey)
+				&& numericKey >= -2147483648
+				&& numericKey <= 2147483647
+				&& String(numericKey) === key
+					? numericKey
+					: key;
+		};
 
 		const origZval = Symbol('origZval');
+		const proxyGeneration = Symbol('vrznoGeneration');
 
 		const _FinalizationRegistry = globalThis.FinalizationRegistry || class { // Polyfill for cloudflare
 			register(){};
@@ -284,111 +288,128 @@ PHP_MINIT_FUNCTION(vrzno)
 			return registry;
 		};
 
-		const refcountRegistryWrapper = class { // Syncs the refcount in PHP with the extra refs from objects held by JS
+		const ownedZvalRegistryWrapper = class {
 			constructor()
 			{
 				this.unregisterTokens = new WeakMap;
-				this.registered = new Module.WeakerMap;
-				this.registry = new _FinalizationRegistry(gc => {
-					Module.ccall(
-						'vrzno_expose_dec_refcount'
-						, 'number'
-						, ['number']
-						, [gc]
-					);
-				});
-			}
-
-			register(target, gc, unregisterToken)
-			{
-				if(this.unregisterTokens.has(unregisterToken))
-				{
-					return;
-				}
-
-				Module.ccall(
-					'vrzno_expose_inc_refcount'
-					, 'number'
-					, ['number']
-					, [gc]
-				);
-
-				this.registry.register(target, gc, unregisterToken);
-				this.unregisterTokens.set(unregisterToken, gc);
-				this.registered.set(gc, unregisterToken);
-			}
-
-			unregister(unregisterToken)
-			{
-				this.registry.unregister(unregisterToken);
-
-				if(this.unregisterTokens.has(unregisterToken))
-				{
-					const gc = this.unregisterTokens.get(unregisterToken);
-					this.unregisterTokens.delete(unregisterToken);
-					this.registered.delete(gc);
-				}
-			}
-		};
-
-		const heapRegistryWrapper = class { // Calls efree() for zvals that were put on the heap by vrzno_exec_callback
-			constructor()
-			{
-				this.unregisterTokens = new WeakMap;
-				this.registered = new Module.WeakerMap;
+				this.entries = new Map;
+				this.allocations = 0;
+				this.releases = 0;
 				this.registry = new _FinalizationRegistry(zv => {
-					Module.ccall(
-						'vrzno_expose_zv_dec_refcount'
-						, 'number'
-						, ['number']
-						, [zv]
-					);
-					Module.ccall(
-						'vrzno_expose_efree'
-						, 'number'
-						, ['number']
-						, [zv]
-					);
+					if(!this.entries.has(zv))
+					{
+						return;
+					}
+
+					this.entries.delete(zv);
+					this.destroy(zv);
 				});
 			}
 
-			register(target, gc, unregisterToken)
+			destroy(zv)
 			{
+				Module.ccall(
+					'vrzno_expose_destroy_zval'
+					, null
+					, ['number']
+					, [zv]
+				);
+				this.releases++;
+			}
+
+			register(target, zv, unregisterToken = target)
+			{
+				this.allocations++;
+
 				if(this.unregisterTokens.has(unregisterToken))
 				{
+					this.destroy(zv);
 					return;
 				}
 
-				this.registry.register(target, gc, unregisterToken);
-				this.unregisterTokens.set(unregisterToken, gc);
-				this.registered.set(gc, unregisterToken);
+				const registryToken = {};
+				this.registry.register(target, zv, registryToken);
+				this.unregisterTokens.set(unregisterToken, {zv, registryToken});
+				this.entries.set(zv, registryToken);
 			}
 
-			unregister(unregisterToken)
+			release(unregisterToken)
 			{
-				this.registry.unregister(unregisterToken);
-
-				if(this.unregisterTokens.has(unregisterToken))
+				if(!this.unregisterTokens.has(unregisterToken))
 				{
-					const gc = this.unregisterTokens.get(unregisterToken);
-					this.unregisterTokens.delete(unregisterToken);
-					this.registered.delete(gc);
+					return false;
 				}
+
+				const entry = this.unregisterTokens.get(unregisterToken);
+				const zv = entry.zv;
+				const registryToken = entry.registryToken;
+				this.registry.unregister(registryToken);
+				this.unregisterTokens.delete(unregisterToken);
+				this.entries.delete(zv);
+				this.destroy(zv);
+				return true;
+			}
+
+			releaseAll()
+			{
+				for(const [zv, registryToken] of this.entries)
+				{
+					this.registry.unregister(registryToken);
+					this.destroy(zv);
+				}
+
+				this.entries.clear();
+				this.unregisterTokens = new WeakMap;
+			}
+
+			get outstanding()
+			{
+				return this.allocations - this.releases;
 			}
 		};
-
-		Module.heapRegistry = Module.heapRegistry || new heapRegistryWrapper();
 
 		const wRef = globalThis.WeakRef || class { // Polyfill for cloudflare
 			constructor(val){ this.val = val };
 			deref() { return this.val };
 		};
 
-		Module.refcountRegistry = new refcountRegistryWrapper;
+		Module.ownedZvalRegistry = new ownedZvalRegistryWrapper;
+		Module.vrznoCopyZval = zv => Module.ccall(
+			'vrzno_expose_copy_zval'
+			, 'number'
+			, ['number']
+			, [zv]
+		);
+		Module.vrznoDestroyZval = zv => Module.ccall(
+			'vrzno_expose_destroy_zval'
+			, null
+			, ['number']
+			, [zv]
+		);
+		Module.vrznoAssertGeneration = generation => {
+			if(generation !== Module.vrznoGeneration)
+			{
+				throw new ReferenceError('Vrzno value belongs to a previous PHP runtime.');
+			}
+		};
+		Module.vrznoThrowRuntimeError = error => {
+			const message = error && error.message ? error.message : String(error);
+			const len = lengthBytesUTF8(message) + 1;
+			const loc = _malloc(len);
+			stringToUTF8(message, loc, len);
+			Module.ccall('vrzno_expose_runtime_error', null, ['number'], [loc]);
+			_free(loc);
+		};
+		Module.vrznoOwnershipStats = () => ({
+			allocations: Module.ownedZvalRegistry.allocations,
+			releases: Module.ownedZvalRegistry.releases,
+			outstanding: Module.ownedZvalRegistry.outstanding,
+			targets: Module.targets ? Module.targets.references.size : 0,
+		});
 
 		Module.bufferMaps = new WeakMap;
 
-		Module.marshalZObject = (zo => {
+		Module.marshalZObject = ((zo, zv = 0) => {
 			const nativeTargetId = Module.ccall(
 				'vrzno_expose_target'
 				, 'number'
@@ -406,8 +427,13 @@ PHP_MINIT_FUNCTION(vrzno)
 				return Module._objects.get(zo);
 			}
 
+			const generation = Module.vrznoGeneration;
+			const ownedZval = zv
+				? Module.vrznoCopyZval(zv)
+				: Module.ccall('vrzno_expose_copy_object', 'number', ['number'], [zo]);
 			const proxy = new Proxy({}, {
 				ownKeys: (target) => {
+					Module.vrznoAssertGeneration(generation);
 					const keysLoc = Module.ccall(
 						'vrzno_expose_object_keys'
 						, 'number'
@@ -424,17 +450,22 @@ PHP_MINIT_FUNCTION(vrzno)
 						return [...new Set(keys)];
 					}
 
-					return [];
+					return Reflect.ownKeys(target);
 				},
 
 				has: (target, prop) => {
+					Module.vrznoAssertGeneration(generation);
+					if(typeof prop === 'symbol')
+					{
+						return Reflect.has(target, prop);
+					}
 					const len = lengthBytesUTF8(prop) + 1;
 					const namePtr = _malloc(len);
 
 					stringToUTF8(prop, namePtr, len);
 
-					const propPtr = Module.ccall(
-						'vrzno_expose_property_pointer'
+					const exists = Module.ccall(
+						'vrzno_expose_has_property'
 						, 'number'
 						, ['number', 'number']
 						, [zo, namePtr]
@@ -442,43 +473,19 @@ PHP_MINIT_FUNCTION(vrzno)
 
 					_free(namePtr);
 
-					return propPtr;
+					return Boolean(exists);
 				},
 
 				get: (target, prop) => {
+					Module.vrznoAssertGeneration(generation);
 					let retPtr;
+					if(prop === origZval || prop === proxyGeneration)
+					{
+						return Reflect.get(target, prop);
+					}
 					if(prop === Symbol.iterator)
 					{
-						return; // @Todo: Detect PHP iterables w/vrzno_expose_is_iterable.
-
-						const keysLoc = Module.ccall(
-							'vrzno_expose_object_keys'
-							, 'number'
-							, ['number']
-							, [zo]
-						);
-						const keyJson = UTF8ToString(keysLoc);
-						const keys = JSON.parse(keyJson);
-						_free(keysLoc);
-
-						const iterator = () => {
-							let current = -1;
-							return {
-								next() {
-									const done = ++current >= keys.length;
-									return {done, value: [keys[current], Module.zvalToJS(Module.ccall(
-										'vrzno_expose_property_pointer'
-										, 'number'
-										, ['number', 'string']
-										, [zo, keys[current]]
-									))]};
-								}
-							}
-						};
-
-						Module.refcountRegistry.register(iterator, zo, iterator);
-
-						return iterator;
+						return;
 					}
 
 					if(prop === Symbol.toPrimitive)
@@ -497,7 +504,15 @@ PHP_MINIT_FUNCTION(vrzno)
 
 						_free(loc);
 
-						return () => Module.callableToJs(methodPtr, zo)();
+						if(!methodPtr)
+						{
+							return;
+						}
+
+						const owner = Module.ccall(
+							'vrzno_expose_copy_object', 'number', ['number'], [zo]
+						);
+						return Module.callableToJs(methodPtr, zo, owner);
 					}
 
 					prop = String(prop);
@@ -514,21 +529,16 @@ PHP_MINIT_FUNCTION(vrzno)
 
 					if(methodPtr)
 					{
-						const wrapped = Module.callableToJs(methodPtr, zo);
-
-						const gc = Module.ccall(
-							'vrzno_expose_closure'
-							, 'number'
-							, ['number']
-							, [methodPtr]
+						_free(loc);
+						const owner = Module.ccall(
+							'vrzno_expose_copy_object', 'number', ['number'], [zo]
 						);
-
-						Module.refcountRegistry.register(wrapped, gc, wrapped);
+						const wrapped = Module.callableToJs(methodPtr, zo, owner);
 						return wrapped;
 					}
 
 					retPtr = Module.ccall(
-						'vrzno_expose_property_pointer'
+						'vrzno_expose_read_property'
 						, 'number'
 						, ['number', 'number']
 						, [zo, loc]
@@ -541,17 +551,22 @@ PHP_MINIT_FUNCTION(vrzno)
 						return;
 					}
 
-					return Module.zvalToJS(retPtr) ?? Reflect.get(target, prop);
+					return Module.consumeZval(retPtr);
 				},
 
 				getOwnPropertyDescriptor: (target, prop) => {
+					Module.vrznoAssertGeneration(generation);
+					if(typeof prop === 'symbol')
+					{
+						return Reflect.getOwnPropertyDescriptor(target, prop);
+					}
 					prop = String(prop);
 					const len = lengthBytesUTF8(prop) + 1;
 					const namePtr = _malloc(len);
 					stringToUTF8(prop, namePtr, len);
 
 					const retPtr = Module.ccall(
-						'vrzno_expose_property_pointer'
+						'vrzno_expose_read_property'
 						, 'number'
 						, ['number', 'number']
 						, [zo, namePtr]
@@ -559,13 +574,20 @@ PHP_MINIT_FUNCTION(vrzno)
 
 					_free(namePtr);
 
-					const proxy = Module.zvalToJS(retPtr);
+					if(!retPtr)
+					{
+						return undefined;
+					}
 
-					return {configurable: true, enumerable: true, value: target[prop]};
+					return {configurable: true, enumerable: true, value: Module.consumeZval(retPtr)};
 				},
 			});
 
-			Module.refcountRegistry.register(proxy, zo, proxy);
+			Object.defineProperties(proxy, {
+				[origZval]: {value: ownedZval},
+				[proxyGeneration]: {value: generation},
+			});
+			Module.ownedZvalRegistry.register(proxy, ownedZval, proxy);
 			Module._objects.set(zo, proxy);
 
 			return proxy;
@@ -577,8 +599,11 @@ PHP_MINIT_FUNCTION(vrzno)
 				return Module._arrays.get(za);
 			}
 
+			const generation = Module.vrznoGeneration;
+			const ownedZval = Module.vrznoCopyZval(zv);
 			const proxy = new Proxy({}, {
 				ownKeys: (target) => {
+					Module.vrznoAssertGeneration(generation);
 					const keysLoc = Module.ccall(
 						'vrzno_expose_array_keys'
 						, 'number'
@@ -598,10 +623,12 @@ PHP_MINIT_FUNCTION(vrzno)
 					return [];
 				},
 				has: (target, prop) => {
-					if(typeof prop === 'string' && Number.isInteger(Number(prop)))
+					Module.vrznoAssertGeneration(generation);
+					if(typeof prop === 'symbol')
 					{
-						prop = Number(prop);
+						return Reflect.has(target, prop);
 					}
+					prop = Module.vrznoNormalizeArrayKey(prop);
 					switch(typeof prop)
 					{
 						case 'number':
@@ -634,7 +661,12 @@ PHP_MINIT_FUNCTION(vrzno)
 					}
 				},
 				get: (target, prop) => {
+					Module.vrznoAssertGeneration(generation);
 					let retPtr;
+					if(prop === origZval || prop === proxyGeneration)
+					{
+						return Reflect.get(target, prop);
+					}
 					if(prop === 'length')
 					{
 						return Module.ccall(
@@ -644,10 +676,7 @@ PHP_MINIT_FUNCTION(vrzno)
 							, [za]
 						);
 					}
-					if(typeof prop === 'string' && Number.isInteger(Number(prop)))
-					{
-						prop = Number(prop);
-					}
+					prop = Module.vrznoNormalizeArrayKey(prop);
 					if(prop === Symbol.iterator)
 					{
 						const max = Module.ccall(
@@ -659,33 +688,36 @@ PHP_MINIT_FUNCTION(vrzno)
 
 						const iterator = () => {
 							let current = -1;
-							return {
+							const iteratorObject = {
 								next() {
+									Module.vrznoAssertGeneration(generation);
 									const done = ++current >= max;
+									if(done)
+									{
+										return {done: true, value: undefined};
+									}
+
 									return {done, value: Module.zvalToJS(Module.ccall(
-										'vrzno_expose_dimension_pointer'
+										'vrzno_expose_array_value_at'
 										, 'number'
 										, ['number', 'number']
 										, [za, current]
 									))};
 								}
-							}
+							};
+
+							const iteratorOwner = Module.vrznoCopyZval(ownedZval);
+							Module.ownedZvalRegistry.register(iteratorObject, iteratorOwner, iteratorObject);
+							return iteratorObject;
 						};
 
-						Module.refcountRegistry.register(iterator, za, iterator);
-
 						return iterator;
-					}
-
-					if(prop === Symbol.toPrimitive)
-					{
 					}
 
 					switch(typeof prop)
 					{
 						case 'symbol':
 							return Reflect.get(target, prop);
-							break;
 						case 'number':
 							retPtr = Module.ccall(
 								'vrzno_expose_dimension_pointer'
@@ -721,11 +753,14 @@ PHP_MINIT_FUNCTION(vrzno)
 						return;
 					}
 
-					const proxy = Module.zvalToJS(retPtr);
-
-					return proxy ?? Reflect.get(target, prop);
+					return Module.zvalToJS(retPtr);
 				},
 				getOwnPropertyDescriptor: (target, prop) => {
+					Module.vrznoAssertGeneration(generation);
+					if(typeof prop === 'symbol')
+					{
+						return Reflect.getOwnPropertyDescriptor(target, prop);
+					}
 					if(prop === 'length')
 					{
 						const value = Module.ccall(
@@ -735,12 +770,14 @@ PHP_MINIT_FUNCTION(vrzno)
 							, [za]
 						);
 
-						return {...Object.getOwnPropertyDescriptor(target, prop), value};
+						return {
+							value,
+							writable: false,
+							enumerable: false,
+							configurable: true,
+						};
 					}
-					if(typeof prop === 'string' && Number.isInteger(Number(prop)))
-					{
-						prop = Number(prop);
-					}
+					prop = Module.vrznoNormalizeArrayKey(prop);
 					let retPtr;
 					switch(typeof prop)
 					{
@@ -773,105 +810,131 @@ PHP_MINIT_FUNCTION(vrzno)
 							return undefined;
 					}
 
-					const proxy = Module.zvalToJS(retPtr);
+					if(!retPtr)
+					{
+						return undefined;
+					}
 
-					return {configurable: true, enumerable: true, value: target[prop]};
+					return {configurable: true, enumerable: true, value: Module.zvalToJS(retPtr)};
 				},
 			});
 
-			Module.refcountRegistry.register(proxy, za, proxy);
+			Object.defineProperties(proxy, {
+				[origZval]: {value: ownedZval},
+				[proxyGeneration]: {value: generation},
+			});
+			Module.ownedZvalRegistry.register(proxy, ownedZval, proxy);
 			Module._arrays.set(za, proxy);
-
-			proxy[origZval] = zv;
 
 			return proxy;
 		});
 
-		Module.callableToJs = ((funcPtr, zo = null) => {
-			if(Module._callables.has(funcPtr))
-			{
-				return Module._callables.get(funcPtr);
-			}
-
+		Module.callableToJs = ((funcPtr, zo = null, ownedZval = 0, callableZval = 0) => {
+			const generation = Module.vrznoGeneration;
 			const wrapped = (...args) => {
-				if(!Module.callables.has(wrapped))
+				Module.vrznoAssertGeneration(generation);
+
+				let paramsPtr = 0;
+				let zv = 0;
+				try
 				{
-					console.warn(`Tried to call ${wrapped.name}, but PHPs memory has been refreshed.`);
-					return;
-				}
-
-				let paramsPtr = null;
-
-				if(args.length)
-				{
-					paramsPtr = Module.ccall(
-						'vrzno_expose_create_params'
-						, 'number'
-						, ['number']
-						, [args.length]
-					);
-
-					for(let i = 0; i < args.length; i++)
+					if(args.length)
 					{
-						Module.jsToZval(args[i], getValue(i * 4 + paramsPtr, '*'));
+						paramsPtr = Module.ccall(
+							'vrzno_expose_create_params'
+							, 'number'
+							, ['number']
+							, [args.length]
+						);
+
+						for(let i = 0; i < args.length; i++)
+						{
+							const paramPtr = Module.ccall(
+								'vrzno_expose_param_at'
+								, 'number'
+								, ['number', 'number']
+								, [paramsPtr, i]
+							);
+							Module.jsToZval(args[i], paramPtr);
+						}
+					}
+
+					if(callableZval)
+					{
+						zv = Module.ccall(
+							'vrzno_exec_zval_callback'
+							, 'number'
+							, ['number','number','number']
+							, [callableZval, paramsPtr, args.length]
+						);
+					}
+					else
+					{
+						zv = Module.ccall(
+							'vrzno_exec_callback'
+							, 'number'
+							, ['number','number','number','number']
+							, [funcPtr, paramsPtr, args.length, zo]
+						);
 					}
 				}
-
-				const zv = Module.ccall(
-					'vrzno_exec_callback'
-					, 'number'
-					, ['number','number','number','number']
-					, [funcPtr, paramsPtr, args.length, zo]
-				);
-
-				if(args.length)
+				finally
 				{
-					Module.ccall(
-						'vrzno_expose_efree'
-						, 'number'
-						, ['number']
-						, [paramsPtr]
-					);
+					if(paramsPtr)
+					{
+						Module.ccall(
+							'vrzno_expose_destroy_params'
+							, null
+							, ['number', 'number']
+							, [paramsPtr, args.length]
+						);
+					}
 				}
 
 				if(zv)
 				{
-					const retVal = Module.zvalToJS(zv);
-
-					if(retVal && (typeof retVal === 'function' || typeof retVal === 'object'))
+					try
 					{
-						Module.heapRegistry.register(retVal, zv, retVal);
+						return Module.zvalToJS(zv);
 					}
-					else
+					finally
 					{
-						Module.ccall(
-							'vrzno_expose_efree'
-							, 'number'
-							, ['number']
-							, [zv]
-						);
+						Module.vrznoDestroyZval(zv);
 					}
-
-					return retVal;
 				}
 			};
 
 			Object.defineProperty(wrapped, 'name', {value: `PHP_@{${funcPtr.toString(/*16*/)}}`});
 
-			Module.callables.set(wrapped, funcPtr);
-			Module._callables.set(funcPtr, wrapped);
+			if(ownedZval)
+			{
+				if(callableZval)
+				{
+					Object.defineProperties(wrapped, {
+						[origZval]: {value: callableZval},
+						[proxyGeneration]: {value: generation},
+					});
+				}
+				Module.ownedZvalRegistry.register(wrapped, ownedZval, wrapped);
+			}
 
 			return wrapped;
 		});
 
 		Module.resourceToJs = ((zr, zv) => {
-			const proxy = {[origZval]: zv};
-			Module.refcountRegistry.register(proxy, zr, proxy);
+			const generation = Module.vrznoGeneration;
+			const ownedZval = Module.vrznoCopyZval(zv);
+			const proxy = {};
+			Object.defineProperties(proxy, {
+				[origZval]: {value: ownedZval},
+				[proxyGeneration]: {value: generation},
+			});
+			Module.ownedZvalRegistry.register(proxy, ownedZval, proxy);
 			Object.freeze(proxy);
 			return proxy;
 		});
 
-		Module.zvalToJS = Module.zvalToJS || (zv => {
+		Module.zvalToJS = (zv => {
 			if(!zv)
 			{
 				return;
@@ -939,18 +1002,8 @@ PHP_MINIT_FUNCTION(vrzno)
 
 			if(zf && type !== IS_STRING)
 			{
-				const wrapped = Module.callableToJs(zf);
-
-				const gc = Module.ccall(
-					'vrzno_expose_closure'
-					, 'number'
-					, ['number']
-					, [zf]
-				);
-
-				Module.refcountRegistry.register(wrapped, gc, wrapped);
-
-				return wrapped;
+				const callableZval = Module.vrznoCopyZval(zv);
+				return Module.callableToJs(zf, null, callableZval, callableZval);
 			}
 
 			let valPtr;
@@ -958,19 +1011,15 @@ PHP_MINIT_FUNCTION(vrzno)
 			{
 				case IS_UNDEF:
 					return undefined;
-					break;
 
 				case IS_NULL:
 					return null;
-					break;
 
 				case IS_TRUE:
 					return true;
-					break;
 
 				case IS_FALSE:
 					return false;
-					break;
 
 				case IS_LONG:
 					return Module.ccall(
@@ -979,7 +1028,6 @@ PHP_MINIT_FUNCTION(vrzno)
 						, ['number']
 						, [zv]
 					);
-					break;
 
 				case IS_DOUBLE:
 					valPtr = Module.ccall(
@@ -995,7 +1043,6 @@ PHP_MINIT_FUNCTION(vrzno)
 					}
 
 					return getValue(valPtr, 'double');
-					break;
 
 				case IS_STRING:
 					valPtr = Module.ccall(
@@ -1010,8 +1057,14 @@ PHP_MINIT_FUNCTION(vrzno)
 						return null;
 					}
 
-					return UTF8ToString(valPtr);
-					break;
+					const valueLength = Module.ccall(
+						'vrzno_expose_string_length'
+						, 'number'
+						, ['number']
+						, [zv]
+					);
+
+					return UTF8ArrayToString(HEAPU8, valPtr, valueLength, true);
 
 				case IS_ARRAY:
 					const za = Module.ccall(
@@ -1021,7 +1074,6 @@ PHP_MINIT_FUNCTION(vrzno)
 						, [zv]
 					);
 					return Module.marshalZArray(za, zv);
-					break;
 
 				case IS_OBJECT:
 					const zo = Module.ccall(
@@ -1030,8 +1082,7 @@ PHP_MINIT_FUNCTION(vrzno)
 						, ['number']
 						, [zv]
 					);
-					return Module.marshalZObject(zo);
-					break;
+					return Module.marshalZObject(zo, zv);
 
 				case IS_RESOURCE:
 					const zp = Module.ccall(
@@ -1041,7 +1092,6 @@ PHP_MINIT_FUNCTION(vrzno)
 						, [zv]
 					);
 					return Module.resourceToJs(zp, zv);
-					break;
 
 				default:
 					console.warn(
@@ -1051,28 +1101,40 @@ PHP_MINIT_FUNCTION(vrzno)
 						, Number(type).toString(2)
 					);
 					return null;
-					break;
 			}
 		});
 
-		Module.jsToZval = Module.jsToZval || ((value, rv) => {
+		Module.consumeZval = zv => {
+			if(!zv)
+			{
+				return undefined;
+			}
+
+			try
+			{
+				return Module.zvalToJS(zv);
+			}
+			finally
+			{
+				Module.vrznoDestroyZval(zv);
+			}
+		};
+
+		Module.jsToZval = ((value, rv) => {
+			Module.ccall(
+				'vrzno_expose_create_null'
+				, null
+				, ['number']
+				, [rv]
+			);
+
 			if(typeof value === 'undefined')
 			{
-				Module.ccall(
-					'vrzno_expose_create_null' // vrzno_expose_create_undef causes problems when creating parameter lists...
-					, 'number'
-					, ['number']
-					, [rv]
-				);
+				return;
 			}
 			else if(value === null)
 			{
-				Module.ccall(
-					'vrzno_expose_create_null'
-					, 'number'
-					, ['number']
-					, [rv]
-				);
+				return;
 			}
 			else if([true, false].includes(value))
 			{
@@ -1087,9 +1149,10 @@ PHP_MINIT_FUNCTION(vrzno)
 			{
 				if(value[origZval])
 				{
+					Module.vrznoAssertGeneration(value[proxyGeneration]);
 					Module.ccall(
-						'vrzno_expose_zval_ref'
-						, 'number'
+						'vrzno_expose_copy_into'
+						, null
 						, ['number', 'number',]
 						, [rv, value[origZval]]
 					);
@@ -1097,22 +1160,21 @@ PHP_MINIT_FUNCTION(vrzno)
 				}
 
 				const index = Module.targets.add(value);
-				const isFunction = typeof value === 'function' ? index : 0;
-				const isConstructor = isFunction && !!(value.prototype && value.prototype.constructor);
-				const isArray = Array.isArray(value);
+				const isConstructor = typeof value === 'function'
+					&& !!(value.prototype && value.prototype.constructor);
 
 				Module.tacked.add(value);
 
 				Module.ccall(
 					'vrzno_expose_create_object_for_target'
 					, 'number'
-					, ['number', 'number', 'number', 'number', 'number']
-					, [index, isFunction, isConstructor, isArray, rv]
+					, ['number', 'number', 'number']
+					, [index, isConstructor, rv]
 				);
 			}
 			else if(typeof value === 'number')
 			{
-				if(Number.isInteger(value)) // Generate long zval
+				if(Number.isInteger(value) && value >= -2147483648 && value <= 2147483647)
 				{
 					Module.ccall(
 						'vrzno_expose_create_long'
@@ -1121,7 +1183,7 @@ PHP_MINIT_FUNCTION(vrzno)
 						, [value, rv]
 					);
 				}
-				else if(Number.isFinite(value)) // Generate double zval
+				else
 				{
 					Module.ccall(
 						'vrzno_expose_create_double'
@@ -1141,10 +1203,19 @@ PHP_MINIT_FUNCTION(vrzno)
 				Module.ccall(
 					'vrzno_expose_create_string'
 					, 'number'
-					, ['number', 'number']
-					, [loc, rv]
+					, ['number', 'number', 'number']
+					, [loc, len - 1, rv]
 				);
 
+				_free(loc);
+			}
+			else if(typeof value === 'bigint' || typeof value === 'symbol')
+			{
+				const message = `Cannot convert JavaScript ${typeof value} to PHP`;
+				const len = lengthBytesUTF8(message) + 1;
+				const loc = _malloc(len);
+				stringToUTF8(message, loc, len);
+				Module.ccall('vrzno_expose_type_error', null, ['number'], [loc]);
 				_free(loc);
 			}
 		});
@@ -1155,6 +1226,7 @@ PHP_MINIT_FUNCTION(vrzno)
 			{
 				this.byObject = new WeakMap();
 				this.byInteger = new Module.WeakerMap();
+				this.references = new Map();
 				this.id = 0;
 
 				Object.defineProperty(this, 'add', {
@@ -1165,6 +1237,7 @@ PHP_MINIT_FUNCTION(vrzno)
 						if(this.byObject.has(callback))
 						{
 							const id = this.byObject.get(callback);
+							this.references.set(id, 1 + (this.references.get(id) || 0));
 
 							return id;
 						}
@@ -1173,6 +1246,7 @@ PHP_MINIT_FUNCTION(vrzno)
 
 						this.byObject.set(callback, newid);
 						this.byInteger.set(newid, callback);
+						this.references.set(newid, 1);
 
 						return newid;
 					}
@@ -1226,6 +1300,13 @@ PHP_MINIT_FUNCTION(vrzno)
 					configurable: false
 					, writable:   false
 					, value: (address) => {
+						const references = this.references.get(address) || 0;
+
+						if(references > 1)
+						{
+							this.references.set(address, references - 1);
+							return;
+						}
 
 						const obj = this.byInteger.get(address);
 
@@ -1233,7 +1314,20 @@ PHP_MINIT_FUNCTION(vrzno)
 						{
 							this.byObject.delete(obj);
 							this.byInteger.delete(address);
+							Module.tacked.delete(obj);
 						}
+
+						this.references.delete(address);
+					}
+				});
+
+				Object.defineProperty(this, 'clear', {
+					configurable: false
+					, writable:   false
+					, value: () => {
+						this.byObject = new WeakMap();
+						this.byInteger = new Module.WeakerMap();
+						this.references.clear();
 					}
 				});
 			}
@@ -1246,10 +1340,7 @@ PHP_MINIT_FUNCTION(vrzno)
 
 		Module.targets = new Module.UniqueIndex;
 
-		Module.callables = new WeakMap();
-		Module._callables = new Module.WeakerMap();
-
-		Module.targets.add(globalThis);
+			Module.targets.add(globalThis);
 		Module.PdoParams = new WeakMap;
 	});
 
@@ -1276,7 +1367,7 @@ PHP_MINFO_FUNCTION(vrzno)
 zend_module_entry vrzno_module_entry = {
 	STANDARD_MODULE_HEADER,
 	"vrzno",
-	vrzno_functions,           /* zend_function_entry */
+	ext_functions,             /* zend_function_entry */
 	PHP_MINIT(vrzno),          /* PHP_MINIT - Module initialization */
 	NULL,                      /* PHP_MSHUTDOWN - Module shutdown */
 	NULL,                      /* PHP_RINIT - Request initialization */
@@ -1293,18 +1384,17 @@ ZEND_TSRMLS_CACHE_DEFINE()
 ZEND_GET_MODULE(vrzno)
 #endif
 
-zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval **argv, int argc, zend_object *zo)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval *argv, int argc, zend_object *zo)
 {
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
-	zval params[argc];
 
 	fci.size = sizeof(fci);
 	ZVAL_UNDEF(&fci.function_name);
 
-	// This must be free()'d in JS immediately or by the heapRegistry.
-	fci.retval = (zval*) ecalloc(1, sizeof(zval));
-	fci.params = params;
+	fci.retval = emalloc(sizeof(zval));
+	ZVAL_UNDEF(fci.retval);
+	fci.params = argv;
 	fci.named_params = 0;
 	fci.param_count = argc;
 
@@ -1321,25 +1411,25 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval **argv,
 		fcc.object = zo;
 	}
 
-	if(argc)
-	{
-		int i;
-		for(i = 0; i < argc; i++)
-		{
-			params[i] = *argv[i];
-		}
-	}
-
 	if(zend_call_function(&fci, &fcc) == SUCCESS)
 	{
 		return fci.retval;
 	}
 
+	vrzno_expose_destroy_zval(fci.retval);
 	return NULL;
 }
 
-int EMSCRIPTEN_KEEPALIVE vrzno_del_callback(zend_function *fptr)
+zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_zval_callback(zval *callback, zval *argv, int argc)
 {
-	GC_DELREF(ZEND_CLOSURE_OBJECT(fptr));
-	return 0;
+	zval *retval = emalloc(sizeof(zval));
+	ZVAL_UNDEF(retval);
+
+	if(call_user_function(EG(function_table), NULL, callback, retval, (uint32_t) argc, argv) == SUCCESS)
+	{
+		return retval;
+	}
+
+	vrzno_expose_destroy_zval(retval);
+	return NULL;
 }

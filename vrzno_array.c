@@ -1,3 +1,5 @@
+#include "vrzno_private.h"
+
 typedef struct vrzno_array_iterator {
 	zend_object_iterator it;
 	zend_long key;
@@ -6,6 +8,13 @@ typedef struct vrzno_array_iterator {
 
 static void vrzno_array_it_dtor(zend_object_iterator *iter)
 {
+	vrzno_array_iterator *vrzno_iter = (vrzno_array_iterator*)iter;
+
+	if(Z_TYPE(vrzno_iter->value) != IS_UNDEF)
+	{
+		zval_ptr_dtor(&vrzno_iter->value);
+	}
+
 	zval_ptr_dtor(&iter->data);
 }
 
@@ -53,6 +62,12 @@ static zend_result vrzno_array_it_valid(zend_object_iterator *it)
 static zval *vrzno_array_it_get_current_data(zend_object_iterator *it)
 {
 	vrzno_array_iterator *iter = (vrzno_array_iterator*)it;
+
+	if(Z_TYPE(iter->value) != IS_UNDEF)
+	{
+		zval_ptr_dtor(&iter->value);
+		ZVAL_UNDEF(&iter->value);
+	}
 
 	EM_ASM({
 		let target = Module.targets.get($0);
@@ -118,14 +133,21 @@ static const zend_object_iterator_funcs vrzno_array_it_funcs = {
 	NULL, // vrzno_array_it_get_gc,
 };
 
-static zend_object_iterator *vrzno_array_get_iterator(zend_class_entry *ce, zval *zv, int by_ref)
+zend_object_iterator *vrzno_array_get_iterator(zend_class_entry *ce, zval *zv, int by_ref)
 {
-	vrzno_array_iterator *iterator = emalloc(sizeof(vrzno_array_iterator)); // @todo: Figure if we need to clear this.
+	if(by_ref)
+	{
+		zend_throw_error(NULL, "Vrzno values cannot be iterated by reference");
+		return NULL;
+	}
+
+	vrzno_array_iterator *iterator = emalloc(sizeof(vrzno_array_iterator));
 	zend_iterator_init(&iterator->it);
 
 	ZVAL_OBJ_COPY(&iterator->it.data, Z_OBJ_P(zv));
+	ZVAL_UNDEF(&iterator->value);
+	iterator->key = 0;
 	iterator->it.funcs = &vrzno_array_it_funcs;
-	// iterator->by_ref = by_ref;
 
 	return &iterator->it;
 }

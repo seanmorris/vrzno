@@ -1,95 +1,131 @@
-# What is VRZNO?
-(/vərəˈzɑːnoʊ/ | vər-ə-ZAH-noh )
+# vrzno
+(/vərəˈzɑːnoʊ/ | vər-ə-ZAH-noh)
 
-VRZNO is a bridge between Javascript & PHP in an extremely nontraditional sense. It lets you pass objects, arrays, callbacks, and classes between PHP & Javascript, as well as scalar values.
-
-Vrzno requires PHP 8.0+
-
-*NOTE: The PDO Connectors have been moved into their own extensions:*
-
-* CloudFlare D1: https://github.com/seanmorris/pdo-cfd1
-* PGLite pgSQL: https://github.com/seanmorris/pdo-pglite
-
-## Contents
-
-* [new Vrzno](#new-vrzno)
-* [PHP Functions](#php-functions)
-* [Javascript Object and Classes](#javascript-object-and-classes)
-* [Callbacks](#callbacks)
-* [Arrays](#arrays)
-* [toString & __toString](#tostring--__tostring)
-* [URL fopen](#url-fopen)
-* [Limitations](#limitations)
-
-## How is this possible?
-VRZNO is the first PHP extension built for php-wasm. Once its compiled with PHP, it can be served to any browser and executed client side. It can also run in NodeJS and CloudFlare workers.
-
-https://github.com/seanmorris/php-wasm
+`vrzno` is the JavaScript bridge extension for `php-wasm`.
+It lets PHP work with JavaScript values, objects, arrays, callbacks, classes, promises, and globals as if they were local PHP values.
 
 ![](https://github.com/seanmorris/vrzno/blob/master/banner.jpg?raw=true)
 
-### new Vrzno
-Creates a new `Vrzno` object that holds a reference to Javascript's `globalThis` object. In the browser this corresponds to `window`.
+`vrzno` requires PHP 8.0+.
+
+The PDO connectors that used to live here now ship as separate extensions:
+
+- Cloudflare D1: <https://github.com/seanmorris/pdo-cfd1>
+- PGlite / PostgreSQL: <https://github.com/seanmorris/pdo-pglite>
+
+## What It Gives You
+
+- access to `globalThis` from PHP through `new Vrzno`
+- JS object, array, and callback marshalling in both directions
+- promise interop through `vrzno_await()`
+- dynamic module loading through `vrzno_import()`
+- runtime value injection through `vrzno_env()` and `vrzno_shared()`
+- `http` and `https` stream wrapper support backed by JavaScript `fetch()`
+
+## Quick Start
+
+In `php-wasm`, Vrzno is typically available by default.
+Pass any JavaScript values you want to expose into the runtime constructor, then read them from PHP.
+
+```js
+import { PhpNode } from 'php-wasm/PhpNode.mjs';
+
+const php = new PhpNode({
+  version: '8.4',
+  answer: 42,
+});
+
+await php.run(`<?php
+  $window = new Vrzno;
+
+  var_dump(vrzno_env('answer'));
+  var_dump($window->Date->now() > 0);
+`);
+```
+
+## Core API
+
+### `new Vrzno`
+
+Creates a handle to JavaScript's `globalThis`.
+In a browser that usually means `window`.
 
 ```php
 <?php
 $window = new Vrzno;
 ```
-## PHP Functions
 
-### `vrzno_await($promise)`
-Wait on a Promise-like object to resolve within PHP before proceeding with the script. This will pause execution of PHP in the same way the `await` keyword does when used in Javascript.
+### `vrzno_await($promiseLike)`
+
+Waits for a promise-like JavaScript value to settle and returns the resolved value to PHP.
 
 ```php
 <?php
 $window = new Vrzno;
-$response = vrzno_await($window->fetch('https://api.weather.gov/gridpoints/TOP/40,74/forecast'));
+
+$response = vrzno_await(
+    $window->fetch('https://api.weather.gov/gridpoints/TOP/40,74/forecast')
+);
+
 $json = vrzno_await($response->json());
 
 var_dump($json);
 ```
 
-### `vrzno_import($module_url)`
-Import a javascript library asynchronously. This is the PHP equivalent of Javascript's dynamic `import()`.
+### `vrzno_import($moduleUrl)`
 
-See a demo: https://codepen.io/SeanMorris227/pen/LYqNNrE
+Performs a dynamic JavaScript `import()` and returns the resulting promise/object bridge.
 
 ```php
 <?php
-$import = vrzno_import('https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm');
+$plot = vrzno_await(
+    vrzno_import('https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm')
+);
 ```
 
 ### `vrzno_env($name)`
-Takes a string, and returns a value passed into the PHP Object's constructor.
 
-For example, if you invoke `PhpNode` like this in Javascript:
+Returns a value that was attached directly to the runtime constructor arguments.
 
-```javascript
-import { PhpNode } from './PhpNode.mjs';
+```js
+import { PhpNode } from 'php-wasm/PhpNode.mjs';
 import gi from 'node-gtk';
+
 const Gtk = gi.require('Gtk', '3.0');
 const WebKit2 = gi.require('WebKit2');
 
-const php = new PhpNode({Gtk, gi, WebKit2});
+const php = new PhpNode({ gi, Gtk, WebKit2 });
 ```
-
-You can access those values in PHP like so:
 
 ```php
 <?php
-$gi  = vrzno_env('gi');
+$gi = vrzno_env('gi');
 $Gtk = vrzno_env('Gtk');
 $WebKit2 = vrzno_env('WebKit2');
 ```
 
-### `vrzno_target($vrzno)`
-Get the `targetId` as an integer from a `Vrzno` object.
+### `vrzno_shared($name)`
 
-## Javascript Object and Classes
+Reads a value from the runtime's shared-value map.
+This is the mechanism used by helpers such as `php.x` and `php.r` in `php-wasm` to move arbitrary JavaScript values into PHP without JSON-encoding them first.
 
-Classes and objects are fully marshalled through Vrzno. You can use Javascript classes by bringing them in like any other object, and things should work as normal.
+### `vrzno_target($value)`
 
-For example, we'll pull in the Javascript `Date` object and call the static function `now()` on it:
+Returns the internal numeric target handle for a bridged JavaScript object.
+This is mostly useful for debugging and internals work.
+
+### Legacy Compatibility Helpers
+
+These functions remain supported without deprecation warnings, but the object bridge is the preferred API:
+
+- `vrzno_eval($code)`
+- `vrzno_run($globalFunctionName, $args = [])`
+- `vrzno_timeout($milliseconds, $callback)`
+
+## Working With JavaScript Objects And Classes
+
+JavaScript classes and objects are marshalled directly through Vrzno.
+Static calls, constructors, property reads, and method calls all use normal PHP syntax.
 
 ```php
 <?php
@@ -97,98 +133,119 @@ $window = new Vrzno;
 $Date = $window->Date;
 
 var_dump($Date->now());
+
+$date = new $Date;
+var_dump($date->toISOString());
 ```
 
-Since the `Date` object is also technically a class in Javascript, we can create a new instance in PHP with the `new` operator, and call the instance method, `toISOString`:
+## Callbacks In Both Directions
 
-```php
-<?php
-$window = new Vrzno;
-$Date = $window->Date;
-
-$d = new $Date;
-
-var_dump($d, $d->toISOString());
-```
-
-## Callbacks
-
-Functions are fully marshalled as well. In this example, we'll create an anonymous PHP callback that calls the Javascript function `window.alert()`, and then pass the PHP callback to Javascript's `setTimeout()` function, which will call it after 1 second.
-
-As you can see, functions from **both** languages are crossing the boundary here:
-
+You can pass a PHP callable to JavaScript and let JavaScript call it later:
 
 ```php
 <?php
 $window = new Vrzno;
 
-$window->setTimeout( fn() => $window->alert('Done!'), 1000);
+$window->setTimeout(
+    fn() => $window->console->log('Done from PHP'),
+    1000
+);
 ```
 
-Since we can create new objects from classes, we can even use this to create promises:
+You can also construct JavaScript promises from PHP:
 
 ```php
 <?php
 $window = new Vrzno;
 $Promise = $window->Promise;
 
-$p = new $Promise(function($accept, $reject) use ($window) {
-    $window->setTimeout( fn() => $accept('Pass.'), 1000);
+$promise = new $Promise(function($accept, $reject) use ($window) {
+    $window->setTimeout(fn() => $accept('Pass.'), 1000);
 });
 
-$p->then(var_dump(...))->catch(var_dump(...));
+$promise->then(var_dump(...))->catch(var_dump(...));
 ```
 
-## Arrays
+## Arrays And Iteration
 
-Both string and integer properties are fully marshalled for both PHP and JS arrays.
+JavaScript arrays are exposed as array-like / iterable values on the PHP side.
+Indexed access and property-style access are both bridged.
 
-## toString & __toString
+## Value Semantics
 
-The Javascript `.toString` method and the PHP `->__toString` method are proxied to each other to ensure proper stringification in both languages.
+- JavaScript `null` and `undefined` both become PHP `null`; PHP has no separate undefined value.
+- PHP `null` becomes JavaScript `null`. A missing PHP array key or object property reads as JavaScript `undefined`.
+- `property_exists()` can distinguish an existing JavaScript property containing `null` or `undefined` from a missing property. `isset()` remains false for all three cases.
+- JavaScript 32-bit integers become PHP integers. Other numbers—including `NaN`, infinities, and larger integers—become PHP floats.
+- JavaScript BigInt and Symbol values cannot be represented in PHP and raise `TypeError`.
+- Embedded null bytes are preserved in strings crossing either direction.
 
-## URL fopen
+JavaScript exceptions and rejected promises become catchable PHP `RuntimeException` instances. A bridged JavaScript proxy that outlives a PHP runtime refresh throws `ReferenceError` when used.
 
-Vrzno implements a fetch-backend for the `http` and `https` stream wrappers, which respects the `allow_url_fopen` ini directive.
+`Vrzno` objects are runtime handles. They cannot be cloned or serialized.
+
+## HTTP And `allow_url_fopen`
+
+Vrzno implements `http` and `https` stream wrappers using JavaScript `fetch()`.
+That means normal PHP stream functions can work in wasm-hosted runtimes when `allow_url_fopen` is enabled.
 
 ```php
 <?php
-var_dump( file_get_contents('https://jsonplaceholder.typicode.com/users') );
+var_dump(file_get_contents('https://jsonplaceholder.typicode.com/users'));
 ```
 
-You can use the `stream_context_create` like normal to modify the request:
+Basic stream context options are supported:
+
+- `method`
+- `content`
+- `header`
+- `ignore_errors`
 
 ```php
 <?php
-$opts = ['http' => [
-    'method' => 'POST',
-    'content' => json_encode(['value' => 'foobar'])
-]];
-
-$context = stream_context_create($opts);
+$context = stream_context_create([
+    'http' => [
+        'method'  => 'POST',
+        'content' => json_encode(['value' => 'foobar']),
+    ],
+]);
 
 var_dump(
-    file_get_contents('https://jsonplaceholder.typicode.com/users', false, $context)
+    file_get_contents(
+        'https://jsonplaceholder.typicode.com/users',
+        false,
+        $context
+    )
 );
 ```
 
-Currently the following context options are implemented:
-
-* method
-* content
-* header
-* ignore_errors
-
-More information on HTTP context options can be found here:
-
-https://www.php.net/manual/en/context.http.php
+More background on HTTP stream options: <https://www.php.net/manual/en/context.http.php>
 
 ## Limitations
 
-* The Javascript object model places properties and methods in the same namespace. PHP however uses separate namespaces for properties and methods. This means an object in PHP can have a property `$x->y` as well as a method `$x->y()`. However if a Javascript object has a method `x.y()`, then the property `x.y` must resolve to the same callback as the method.
+- JavaScript uses one namespace for properties and methods. PHP separates them. If a PHP object exposes both `$x->y` and `$x->y()`, JavaScript can only see one of them. Today, method names win.
+- PHP classes are not exposed back to JavaScript as constructible classes.
+- Static methods are not currently proxied back from PHP into JavaScript.
+- The legacy helper functions are string-based conveniences, not the preferred long-term API.
 
-  Currently, when a PHP object is passed into a Javascript execution environment, method names take precedence over property names. This means if a PHP object has both a method `$x->y()`, and a property `$x->y`, then the property will be inaccessible from Javascript.
+## Platform Support
 
-* PHP Classes are not **yet** accessible from Javascript. I.e. there is no way to pass a class out of PHP and call `new` on it from Javascript.
+Vrzno 0.2 supports PHP 8.0 through 8.5 compiled for Emscripten's wasm32 memory model. It is not a native desktop/server PHP extension and intentionally fails compilation on non-wasm32 targets.
 
-* Static methods are not yet proxied.
+## Building And Testing
+
+Use a neighboring `php-wasm` checkout as the build harness:
+
+```sh
+cd ../php-wasm
+npm ci
+make image
+make -j2 node-mjs PHP_VERSION=8.4 VRZNO_DEV_PATH="$PWD/../vrzno"
+PHP_VERSION=8.4 node --test packages/vrzno/test/*.mjs
+```
+
+The CI matrix compiles and smoke-tests the oldest and newest supported PHP releases. Before sending a change, regenerate `vrzno_arginfo.h` from `vrzno.stub.php`, run the integration tests, and confirm `git diff --check` is clean.
+
+## License
+
+Vrzno is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
