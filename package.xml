@@ -51,8 +51,12 @@
     <file name="callback-identity.mjs" role="test" />
     <file name="integration.mjs" role="test" />
     <file name="iterator-lifecycle.mjs" role="test" />
+    <file name="lifecycle-contract.mjs" role="test" />
+    <file name="magic-method-identity.mjs" role="test" />
     <file name="ownership.mjs" role="test" />
     <dir name="lib">
+     <file name="lifecycle-child.mjs" role="test" />
+     <file name="lifecycle-process.mjs" role="test" />
      <file name="php-node.mjs" role="test" />
     </dir>
    </dir>

@@ -128,7 +128,6 @@ PHP_FUNCTION(vrzno_run)
 PHP_FUNCTION(vrzno_timeout)
 {
 	zval *callback;
-	zend_fcall_info_cache fcc;
 	zend_long timeout;
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
@@ -142,7 +141,7 @@ PHP_FUNCTION(vrzno_timeout)
 		RETURN_THROWS();
 	}
 
-	if(!zend_is_callable_ex(callback, NULL, 0, NULL, &fcc, NULL))
+	if(!zend_is_callable(callback, 0, NULL))
 	{
 		zend_argument_type_error(2, "must be a valid callback, %s given", zend_zval_type_name(callback));
 		RETURN_THROWS();

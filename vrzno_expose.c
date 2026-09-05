@@ -245,16 +245,10 @@ vrzno_target_id EMSCRIPTEN_KEEPALIVE vrzno_expose_target(zend_object *zo)
 	return 0;
 }
 
-zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
+int EMSCRIPTEN_KEEPALIVE vrzno_expose_callable(zval *zv)
 {
-	zend_fcall_info_cache fcc;
-
-	if(zend_is_callable_ex(zv, NULL, 0, NULL, &fcc, NULL))
-	{
-		return fcc.function_handler;
-	}
-
-	return NULL;
+	/* A probe must not retain a temporary __call trampoline. */
+	return zend_is_callable(zv, 0, NULL);
 }
 
 zend_long EMSCRIPTEN_KEEPALIVE vrzno_expose_long(zval *zv)
@@ -349,10 +343,32 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_array_value_at(zend_array *za, uint32_t 
 	return NULL;
 }
 
-zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_pointer(zend_object *zo, char *method)
+zend_function* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_pointer(
+	zend_object *zo, char *method, size_t length, int *is_magic)
 {
-	zend_string *zMethod = zend_string_init(method, strlen(method), 0);
+	*is_magic = 0;
+	zend_string *zMethod = zend_string_init(method, length, 0);
 	zend_function *zf = zend_std_get_method(&zo, zMethod, 0);
 	zend_string_release(zMethod);
+	if(zf && (zf->common.fn_flags & ZEND_ACC_CALL_VIA_TRAMPOLINE))
+	{
+		zend_fcall_info_cache fcc = {0};
+		fcc.function_handler = zf;
+		*is_magic = 1;
+		zend_release_fcall_info_cache(&fcc);
+		return NULL;
+	}
 	return zf;
+}
+
+zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_method_callable(
+	zend_object *zo, char *method, size_t length)
+{
+	zval *owned = emalloc(sizeof(zval));
+	zval receiver;
+	array_init_size(owned, 2);
+	ZVAL_OBJ_COPY(&receiver, zo);
+	add_next_index_zval(owned, &receiver);
+	add_next_index_stringl(owned, method, length);
+	return owned;
 }

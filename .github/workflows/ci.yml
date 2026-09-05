@@ -27,11 +27,16 @@ jobs:
         with:
           path: vrzno
 
+      - name: Use the tested Node runtime for required GC coverage
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+
       - name: Check out the php-wasm integration baseline
         uses: actions/checkout@v6
         with:
           repository: seanmorris/php-wasm
-          ref: 36f394873ee05262dbf392152a9ab6016d0e111a
+          ref: d8bd862e017f39447237a39b854599039846cf0e
           path: php-wasm
 
       - name: Configure php-wasm

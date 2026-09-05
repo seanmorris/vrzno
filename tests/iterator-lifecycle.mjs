@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { setImmediate } from 'node:timers/promises';
 import { PhpNode } from './lib/php-node.mjs';
+import { runLifecycleChild } from './lib/lifecycle-process.mjs';
 
 const staleValueError = {
 	name: 'ReferenceError',
@@ -98,38 +98,5 @@ test('Refresh rejects stale array factories before they allocate PHP owners', as
 	assert.equal(await php.x`6 * 7`, 42);
 });
 
-test('Unreachable array factories and iterators release their PHP owners', {
-	skip: typeof globalThis.gc !== 'function' || typeof WeakRef !== 'function',
-}, async context => {
-	const php = new PhpNode();
-	const module = await php.binary;
-	context.after(() => php.refresh());
-	const baseline = module.vrznoOwnershipStats().outstanding;
-
-	const createUnreachableOwners = async () => {
-		const proxy = await php.x`range(1, 3)`;
-		const factory = proxy[Symbol.iterator];
-		assert.equal(module.vrznoOwnershipStats().outstanding, baseline + 2,
-			'A detached iterator factory must own a separate PHP value');
-		const iterator = factory();
-		assert.deepEqual(iterator.next(), {done: false, value: 1});
-		return [proxy, factory, iterator].map(owner => new WeakRef(owner));
-	};
-	const references = await createUnreachableOwners();
-
-	for(let attempt = 0; attempt < 30; attempt++)
-	{
-		// Yield before GC so deref() in the previous attempt no longer keeps values alive.
-		await setImmediate();
-		globalThis.gc();
-		await setImmediate();
-		if(references.every(reference => reference.deref() === undefined)
-			&& module.vrznoOwnershipStats().outstanding === baseline)
-		{
-			return;
-		}
-	}
-
-	// Explicit release tests above enforce cleanup without depending on finalizer timing.
-	context.skip('Collection or finalization was not observed during the bounded GC check');
-});
+test('Unreachable array factories and iterators release owners under native GC', () =>
+	runLifecycleChild('native-iterators'));

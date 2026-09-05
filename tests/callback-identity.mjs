@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { setTimeout as delay } from 'node:timers/promises';
 
 import { PhpNode, capture } from './lib/php-node.mjs';
+import { runLifecycleChild } from './lib/lifecycle-process.mjs';
 
 test('The same PHP closure can be added and removed as an event listener', async context => {
 	const php = new PhpNode();
@@ -148,29 +148,5 @@ test('Refresh clears callable identity and rejects stale wrappers', async contex
 	assert.equal(current(), 'current');
 });
 
-test('The callable cache does not keep abandoned wrappers alive', async context => {
-	if(typeof globalThis.gc !== 'function')
-	{
-		context.skip('Run with --expose-gc for supplemental finalization coverage');
-		return;
-	}
-	const php = new PhpNode();
-	context.after(() => php.refresh());
-	const module = await php.binary;
-	const baseline = module.vrznoOwnershipStats().outstanding;
-	let callback = await php.x`fn() => 42`;
-	const weak = new WeakRef(callback);
-	callback = null;
-
-	for(let i = 0; i < 30; i++)
-	{
-		await delay(0);
-		globalThis.gc();
-		await delay(10);
-		if(!weak.deref() && module.vrznoOwnershipStats().outstanding === baseline)
-		{
-			return;
-		}
-	}
-	context.skip('The engine did not schedule collection within the supplemental GC window');
-});
+test('The callable cache releases abandoned wrappers under native GC', () =>
+	runLifecycleChild('native-callback'));

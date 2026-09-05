@@ -410,6 +410,50 @@ PHP_MINIT_FUNCTION(vrzno)
 
 		Module.bufferMaps = new WeakMap;
 
+		Module.methodToJs = (zo, method) => {
+			const length = lengthBytesUTF8(method);
+			const namePtr = _malloc(length + 1);
+			const magicPtr = _malloc(4);
+			let callable = 0;
+			try
+			{
+				stringToUTF8(method, namePtr, length + 1);
+				const funcPtr = Module.ccall(
+					'vrzno_expose_method_pointer', 'number',
+					['number', 'number', 'number', 'number'],
+					[zo, namePtr, length, magicPtr]
+				);
+				if(!getValue(magicPtr, 'i32'))
+				{
+					return funcPtr ? Module.callableToJs(funcPtr, zo) : undefined;
+				}
+
+				// Zend's lookup trampoline has already been released. Cache by
+				// the requested spelling, which is observable inside __call.
+				const cacheKey = `magic:${zo}:${method}`;
+				const cached = Module._callables.get(`${Module.vrznoGeneration}:${cacheKey}`);
+				if(cached)
+				{
+					return cached;
+				}
+				callable = Module.ccall(
+					'vrzno_expose_method_callable', 'number',
+					['number', 'number', 'number'], [zo, namePtr, length]
+				);
+				// callableToJs copies the specification; the temporary is ours.
+				return Module.callableToJs(0, null, callable, cacheKey);
+			}
+			finally
+			{
+				if(callable)
+				{
+					Module.vrznoDestroyZval(callable);
+				}
+				_free(magicPtr);
+				_free(namePtr);
+			}
+		};
+
 		Module.marshalZObject = ((zo, zv = 0) => {
 			const nativeTargetId = Module.ccall(
 				'vrzno_expose_target'
@@ -491,46 +535,18 @@ PHP_MINIT_FUNCTION(vrzno)
 
 					if(prop === Symbol.toPrimitive)
 					{
-						const method = '__toString';
-						const len = lengthBytesUTF8(method) + 1;
-						const loc = _malloc(len);
-						stringToUTF8(method, loc, len);
-
-						const methodPtr = Module.ccall(
-							'vrzno_expose_method_pointer'
-							, 'number'
-							, ['number', 'number']
-							, [zo, loc]
-						);
-
-						_free(loc);
-
-						if(!methodPtr)
-						{
-							return;
-						}
-
-						return Module.callableToJs(methodPtr, zo);
+						return Module.methodToJs(zo, '__toString');
 					}
 
 					prop = String(prop);
+					const method = Module.methodToJs(zo, prop);
+					if(method)
+					{
+						return method;
+					}
 					const len = lengthBytesUTF8(prop) + 1;
 					const loc = _malloc(len);
 					stringToUTF8(prop, loc, len);
-
-					const methodPtr = Module.ccall(
-						'vrzno_expose_method_pointer'
-						, 'number'
-						, ['number', 'number']
-						, [zo, loc]
-					);
-
-					if(methodPtr)
-					{
-						_free(loc);
-						const wrapped = Module.callableToJs(methodPtr, zo);
-						return wrapped;
-					}
 
 					retPtr = Module.ccall(
 						'vrzno_expose_read_property'
@@ -1005,14 +1021,14 @@ PHP_MINIT_FUNCTION(vrzno)
 				);
 			}
 
-			const zf = Module.ccall(
+			const isCallable = Module.ccall(
 				'vrzno_expose_callable'
 				, 'number'
 				, ['number']
 				, [zv]
 			);
 
-			if(zf && type !== IS_STRING)
+			if(isCallable && type !== IS_STRING)
 			{
 				// Keep distinct closures and callable arrays separate even when they
 				// resolve to the same function. The wrapper keeps this identity alive.
@@ -1022,7 +1038,7 @@ PHP_MINIT_FUNCTION(vrzno)
 					, ['number']
 					, [zv]
 				);
-				return Module.callableToJs(zf, null, zv, `${type}:${identity}`);
+				return Module.callableToJs(0, null, zv, `${type}:${identity}`);
 			}
 
 			let valPtr;
@@ -1371,6 +1387,7 @@ PHP_MINFO_FUNCTION(vrzno)
 {
 	php_info_print_table_start();
 	php_info_print_table_row(2, "Vrzno support for php-wasm", "enabled");
+	php_info_print_table_row(2, "Version", PHP_VRZNO_VERSION);
 	php_info_print_table_end();
 
 	if (!sapi_module.phpinfo_as_text) {
@@ -1406,8 +1423,8 @@ ZEND_GET_MODULE(vrzno)
 
 zval* EMSCRIPTEN_KEEPALIVE vrzno_exec_callback(zend_function *func, zval *argv, int argc, zend_object *zo)
 {
-	zend_fcall_info fci;
-	zend_fcall_info_cache fcc;
+	zend_fcall_info fci = {0};
+	zend_fcall_info_cache fcc = {0};
 
 	fci.size = sizeof(fci);
 	ZVAL_UNDEF(&fci.function_name);

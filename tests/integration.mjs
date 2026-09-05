@@ -2,6 +2,19 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { PhpNode } from './lib/php-node.mjs';
 
+test('Vrzno phpinfo reports the extension version', async context => {
+	const php = new PhpNode();
+	context.after(() => php.refresh());
+	const version = await php.x`phpversion('vrzno')`;
+	const info = await php.x`(function () {
+		ob_start();
+		(new ReflectionExtension('vrzno'))->info();
+		return ob_get_clean();
+	})()`;
+	const text = info.replace(/<[^>]*>/g, ' ').replace(/=>/g, ' ').replace(/\s+/g, ' ');
+	assert.ok(text.includes(`Version ${version}`), 'The phpinfo row must match phpversion("vrzno")');
+});
+
 test('Vrzno extension smoke test', async () => {
 	const php = new PhpNode();
 	let stdout = '';

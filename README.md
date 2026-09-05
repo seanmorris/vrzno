@@ -251,7 +251,7 @@ cd ../vrzno
 PHP_VERSION=8.4 PHP_WASM_ROOT=../php-wasm node --expose-gc --test tests/*.mjs
 ```
 
-The CI matrix compiles and runs these tests on the oldest and newest supported PHP releases. They cover callback identity and listener removal, detached iterator lifetimes, runtime refresh, and owned expression-result cleanup. Lifetime assertions use deterministic ownership release; supplemental garbage-collection checks may skip when the engine does not schedule finalization in time.
+The CI matrix compiles and runs these tests on the oldest and newest supported PHP releases using Node 22.23.2. They cover callback identity (including magic methods) and listener removal, detached iterator lifetimes, runtime refresh, and owned expression-result cleanup. Both controlled lifecycle tests and native garbage-collection tests are required. Negative controls verify that a strong callback cache or disabled finalization fails the expected assertion. Native GC tests fail on timeout or missing GC support; they never turn a possible leak into a skipped test.
 
 Before sending a change, regenerate `vrzno_arginfo.h` if `vrzno.stub.php` changed, run both test suites, and confirm `git diff --check` is clean.
 
