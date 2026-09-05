@@ -17,6 +17,7 @@ PHP_RSHUTDOWN_FUNCTION(vrzno)
 		Module._classes = new Module.WeakerMap();
 		Module._objects = new Module.WeakerMap();
 		Module._arrays = new Module.WeakerMap();
+		Module._callables = new Module.WeakerMap();
 		Module.targets.clear();
 		Module.targets.add(globalThis);
 	});
@@ -509,10 +510,7 @@ PHP_MINIT_FUNCTION(vrzno)
 							return;
 						}
 
-						const owner = Module.ccall(
-							'vrzno_expose_copy_object', 'number', ['number'], [zo]
-						);
-						return Module.callableToJs(methodPtr, zo, owner);
+						return Module.callableToJs(methodPtr, zo);
 					}
 
 					prop = String(prop);
@@ -530,10 +528,7 @@ PHP_MINIT_FUNCTION(vrzno)
 					if(methodPtr)
 					{
 						_free(loc);
-						const owner = Module.ccall(
-							'vrzno_expose_copy_object', 'number', ['number'], [zo]
-						);
-						const wrapped = Module.callableToJs(methodPtr, zo, owner);
+						const wrapped = Module.callableToJs(methodPtr, zo);
 						return wrapped;
 					}
 
@@ -829,8 +824,20 @@ PHP_MINIT_FUNCTION(vrzno)
 			return proxy;
 		});
 
-		Module.callableToJs = ((funcPtr, zo = null, ownedZval = 0, callableZval = 0) => {
+		Module.callableToJs = ((funcPtr, zo = null, zv = 0, cacheKey = `method:${zo}:${funcPtr}`) => {
 			const generation = Module.vrznoGeneration;
+			cacheKey = `${generation}:${cacheKey}`;
+			const cached = Module._callables.get(cacheKey);
+			if(cached)
+			{
+				return cached;
+			}
+
+			// Only the first wrapper owns a reference. Cache hits must not copy it.
+			const ownedZval = zv
+				? Module.vrznoCopyZval(zv)
+				: Module.ccall('vrzno_expose_copy_object', 'number', ['number'], [zo]);
+			const callableZval = zv ? ownedZval : 0;
 			const wrapped = (...args) => {
 				Module.vrznoAssertGeneration(generation);
 
@@ -918,6 +925,7 @@ PHP_MINIT_FUNCTION(vrzno)
 				Module.ownedZvalRegistry.register(wrapped, ownedZval, wrapped);
 			}
 
+			Module._callables.set(cacheKey, wrapped);
 			return wrapped;
 		});
 
@@ -1002,8 +1010,15 @@ PHP_MINIT_FUNCTION(vrzno)
 
 			if(zf && type !== IS_STRING)
 			{
-				const callableZval = Module.vrznoCopyZval(zv);
-				return Module.callableToJs(zf, null, callableZval, callableZval);
+				// Keep distinct closures and callable arrays separate even when they
+				// resolve to the same function. The wrapper keeps this identity alive.
+				const identity = Module.ccall(
+					type === IS_OBJECT ? 'vrzno_expose_object' : 'vrzno_expose_array'
+					, 'number'
+					, ['number']
+					, [zv]
+				);
+				return Module.callableToJs(zf, null, zv, `${type}:${identity}`);
 			}
 
 			let valPtr;
@@ -1337,6 +1352,7 @@ PHP_MINIT_FUNCTION(vrzno)
 		Module._classes = new Module.WeakerMap();
 		Module._objects = new Module.WeakerMap();
 		Module._arrays = new Module.WeakerMap();
+		Module._callables = new Module.WeakerMap();
 
 		Module.targets = new Module.UniqueIndex;
 

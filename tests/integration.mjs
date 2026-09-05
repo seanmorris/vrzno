@@ -1,23 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const phpWasmRoot = resolve(process.env.PHP_WASM_ROOT ?? '../php-wasm');
-const { PhpNode: BasePhpNode } = await import(pathToFileURL(
-	resolve(phpWasmRoot, 'packages/php-wasm/PhpNode.mjs')
-));
-const { nodeRuntimeOptions } = await import(pathToFileURL(
-	resolve(phpWasmRoot, 'test/lib/node-runtime-options.mjs')
-));
-
-class PhpNode extends BasePhpNode
-{
-	constructor(args = {})
-	{
-		super(nodeRuntimeOptions(args));
-	}
-}
+import { PhpNode } from './lib/php-node.mjs';
 
 test('Vrzno extension smoke test', async () => {
 	const php = new PhpNode();
