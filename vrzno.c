@@ -681,7 +681,10 @@ PHP_MINIT_FUNCTION(vrzno)
 							, [za]
 						);
 
+						// A detached factory can outlive the proxy that exposed it.
+						const factoryOwner = Module.vrznoCopyZval(ownedZval);
 						const iterator = () => {
+							Module.vrznoAssertGeneration(generation);
 							let current = -1;
 							const iteratorObject = {
 								next() {
@@ -701,11 +704,12 @@ PHP_MINIT_FUNCTION(vrzno)
 								}
 							};
 
-							const iteratorOwner = Module.vrznoCopyZval(ownedZval);
+							const iteratorOwner = Module.vrznoCopyZval(factoryOwner);
 							Module.ownedZvalRegistry.register(iteratorObject, iteratorOwner, iteratorObject);
 							return iteratorObject;
 						};
 
+						Module.ownedZvalRegistry.register(iterator, factoryOwner, iterator);
 						return iterator;
 					}
 
