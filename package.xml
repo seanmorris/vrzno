@@ -48,7 +48,13 @@
    <dir name="tests">
     <file name="001.phpt" role="test" />
     <file name="002.phpt" role="test" />
+    <file name="callback-identity.mjs" role="test" />
     <file name="integration.mjs" role="test" />
+    <file name="iterator-lifecycle.mjs" role="test" />
+    <file name="ownership.mjs" role="test" />
+    <dir name="lib">
+     <file name="php-node.mjs" role="test" />
+    </dir>
    </dir>
   </dir>
  </contents>

@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: seanmorris/php-wasm
-          ref: 2c176adf9fc65ad70471e6c5d424df2524b49772
+          ref: 36f394873ee05262dbf392152a9ab6016d0e111a
           path: php-wasm
 
       - name: Configure php-wasm
@@ -54,9 +54,9 @@ jobs:
           WITH_VRZNO=1
           VRZNO_DEV_PATH="${GITHUB_WORKSPACE}/vrzno"
 
-      - name: Run the integration smoke test
+      - name: Run the integration regression tests
         working-directory: vrzno
         env:
           PHP_VERSION: ${{ matrix.php-version }}
           PHP_WASM_ROOT: ${{ github.workspace }}/php-wasm
-        run: node --test tests/integration.mjs
+        run: node --expose-gc --test tests/*.mjs

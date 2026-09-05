@@ -244,7 +244,16 @@ make -j2 node-mjs PHP_VERSION=8.4 VRZNO_DEV_PATH="$PWD/../vrzno"
 PHP_VERSION=8.4 node --test packages/vrzno/test/*.mjs
 ```
 
-The CI matrix compiles and smoke-tests the oldest and newest supported PHP releases. Before sending a change, regenerate `vrzno_arginfo.h` from `vrzno.stub.php`, run the integration tests, and confirm `git diff --check` is clean.
+Run this repository's regression suite against the freshly built runtime:
+
+```bash
+cd ../vrzno
+PHP_VERSION=8.4 PHP_WASM_ROOT=../php-wasm node --expose-gc --test tests/*.mjs
+```
+
+The CI matrix compiles and runs these tests on the oldest and newest supported PHP releases. They cover callback identity and listener removal, detached iterator lifetimes, runtime refresh, and owned expression-result cleanup. Lifetime assertions use deterministic ownership release; supplemental garbage-collection checks may skip when the engine does not schedule finalization in time.
+
+Before sending a change, regenerate `vrzno_arginfo.h` if `vrzno.stub.php` changed, run both test suites, and confirm `git diff --check` is clean.
 
 ## License
 
