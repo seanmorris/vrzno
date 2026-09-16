@@ -232,6 +232,13 @@ More background on HTTP stream options: <https://www.php.net/manual/en/context.h
 
 Vrzno 0.2 supports PHP 8.0 through 8.5 compiled for Emscripten's wasm32 memory model. It is not a native desktop/server PHP extension and intentionally fails compilation on non-wasm32 targets.
 
+The JavaScript runtime must provide `WeakRef` and `FinalizationRegistry`.
+Initialization rejects unsupported environments with an actionable error. Cloudflare
+Workers must use compatibility date `2025-05-05` or later, or explicitly enable
+the `enable_weak_ref` compatibility flag. Strong-reference and no-op finalizer
+fallbacks are no longer supported; explicit PHP ownership cleanup still runs
+at shutdown independently of garbage collection.
+
 ## Building And Testing
 
 The bridge's JavaScript lives in root-level `.js` files. The five `*_js.h.in`
@@ -244,7 +251,9 @@ includes before `EM_JS`/`EM_ASYNC_JS` stringify the bodies. Generated headers an
 dependency files live under the extension's build directory in `generated/`.
 The resulting native objects contain the JS; linking them needs no source files,
 `--js-library` option, or runtime npm import. Building requires GNU Make 4.3 or newer
-for grouped targets. npm is used only for development checks.
+for grouped targets, Node, and npm. Make installs the locked build dependencies in
+`generated/npm` and bundles `weakermap` plus `vrzno_weakermap.mjs` with esbuild.
+The source checkout is unchanged, including when using a separate build directory.
 
 Run the fast checks with Emscripten 6.0.6 available as `emcc`:
 
@@ -257,7 +266,7 @@ npm test
 The style check uses the pinned npm `sm-no-saccade-style` recommended configuration.
 The Make tests cover separate build directories, every JS input's dependencies,
 parallel builds, missing inputs, recovery, clean targets, and object-only linking.
-`npm run test:weakermap` repeats the [weakermap compatibility evaluation](docs/weakermap.md).
+`npm run test:weakermap` checks the [weakermap integration contract](docs/weakermap.md).
 
 Use a neighboring `php-wasm` checkout as the build harness:
 
@@ -282,4 +291,5 @@ Before sending a change, regenerate `vrzno_arginfo.h` if `vrzno.stub.php` change
 
 ## License
 
-Vrzno is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+Vrzno is licensed under the Apache License 2.0. See [LICENSE](LICENSE) and
+[NOTICE](NOTICE) for the bundled weakermap attribution.

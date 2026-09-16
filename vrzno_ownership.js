@@ -13,7 +13,7 @@ const ownedZvalRegistryWrapper = class {
 		this.entries = new Map;
 		this.allocations = 0;
 		this.releases = 0;
-		this.registry = new _FinalizationRegistry(zv => {
+		this.registry = new FinalizationRegistry(zv => {
 			if(!this.entries.has(zv))
 			{
 				return;
@@ -90,7 +90,7 @@ const ownedZvalRegistryWrapper = class {
 
 	/**
 	 * Cancels all current finalizers and destroys their zvals before PHP request
-	 * memory is reclaimed. This also handles runtimes without FinalizationRegistry.
+	 * memory is reclaimed, regardless of whether garbage collection has run.
 	 *
 	 * @returns {void}
 	 */
@@ -113,15 +113,6 @@ const ownedZvalRegistryWrapper = class {
 	get outstanding() {
 		return this.allocations - this.releases;
 	}
-};
-
-/**
- * Uses native weak references when available. The fallback holds values strongly until
- * explicit removal or shutdown; it does not emulate garbage collection.
- */
-const wRef = globalThis.WeakRef || class { // Polyfill for cloudflare
-	constructor(val){ this.val = val; };
-	deref() { return this.val; };
 };
 
 Module.ownedZvalRegistry = new ownedZvalRegistryWrapper;

@@ -2,9 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import {fileURLToPath} from 'node:url';
+import {bundleWeakermap} from '../../vrzno_bundle.mjs';
 
 export const root = fileURLToPath(new URL('../../', import.meta.url));
 export const templates = fs.readdirSync(root).filter(name => name.endsWith('_js.h.in')).sort();
+const cacheBundle = await bundleWeakermap(root, path.join(root, 'node_modules'));
+
+/** Read a bridge input, generating the npm bundle with the same builder as Make. */
+export function inputBody(name, directory = root)
+{
+	return name === 'vrzno_weakermap.js' ? cacheBundle : fs.readFileSync(path.join(directory, name), 'utf8');
+}
 
 /** Read the native declarations and their ordered JS includes. */
 export function declarations(directory = root)
@@ -80,7 +88,7 @@ export function bridge(overrides = {})
 		, ...overrides.globals
 	});
 	const functions = Object.fromEntries(declarations().map(entry => {
-		const body = entry.inputs.map(name => fs.readFileSync(path.join(root, name), 'utf8')).join('\n');
+		const body = entry.inputs.map(name => inputBody(name)).join('\n');
 		const args = entry.parameters.map(parameter => parameter.match(/\w+$/)[0]);
 		return [entry.name, vm.runInContext(`(${entry.async ? 'async ' : ''}function(${args.join(',')}) {\n${body}\n})`, context)];
 	}));

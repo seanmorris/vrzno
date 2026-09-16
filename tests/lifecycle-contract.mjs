@@ -8,6 +8,8 @@ for(const [name, mode] of [
 	['Iterators survive their factory being finalized first', 'controlled-factory-first'],
 	['Factories survive iterator finalization and create replacement iterators', 'controlled-iterator-first'],
 	['Shutdown cancels queued owner finalizers before runtime reuse', 'controlled-shutdown'],
+	['Startup rejects a runtime without WeakRef', 'unsupported-WeakRef'],
+	['Startup rejects a runtime without FinalizationRegistry', 'unsupported-FinalizationRegistry'],
 ])
 {
 	test(name, () => runLifecycleChild(mode));

@@ -266,29 +266,41 @@ let php;
 let report;
 try
 {
-	const collector = mode.startsWith('native-') ? null : controlledCollector();
-	const runtime = await createRuntime(collector);
-	php = runtime.php;
-	if(mode === 'native-callback' || mode === 'native-iterators')
+	if(mode.startsWith('unsupported-'))
 	{
-		await nativeCleanup(php, runtime.module);
-	}
-	else if(mode === 'controlled-factory-first' || mode === 'controlled-iterator-first')
-	{
-		await controlledIterators(php, runtime.module, collector);
-	}
-	else if(mode === 'controlled-shutdown')
-	{
-		await controlledShutdown(php, runtime.module, collector);
-	}
-	else if(['controlled-callback-owner-first', 'controlled-callback-cache-first', 'controlled-explicit-release',
-		'negative-strong-cache', 'negative-disabled-finalizer'].includes(mode))
-	{
-		await controlledCallback(php, runtime.module, collector);
+		const apis = {WeakRef, FinalizationRegistry, [mode.slice('unsupported-'.length)]: undefined};
+		await withCollector(apis, async () => {
+			const unsupported = new PhpNode();
+			await assert.rejects(unsupported.binary,
+				/Vrzno requires WeakRef and FinalizationRegistry.*enable_weak_ref.*2025-05-05/);
+		});
 	}
 	else
 	{
-		throw new Error(`Unknown lifecycle mode: ${mode}`);
+		const collector = mode.startsWith('native-') ? null : controlledCollector();
+		const runtime = await createRuntime(collector);
+		php = runtime.php;
+		if(mode === 'native-callback' || mode === 'native-iterators')
+		{
+			await nativeCleanup(php, runtime.module);
+		}
+		else if(mode === 'controlled-factory-first' || mode === 'controlled-iterator-first')
+		{
+			await controlledIterators(php, runtime.module, collector);
+		}
+		else if(mode === 'controlled-shutdown')
+		{
+			await controlledShutdown(php, runtime.module, collector);
+		}
+		else if(['controlled-callback-owner-first', 'controlled-callback-cache-first', 'controlled-explicit-release',
+			'negative-strong-cache', 'negative-disabled-finalizer'].includes(mode))
+		{
+			await controlledCallback(php, runtime.module, collector);
+		}
+		else
+		{
+			throw new Error(`Unknown lifecycle mode: ${mode}`);
+		}
 	}
 	report = {mode, ok: true};
 }

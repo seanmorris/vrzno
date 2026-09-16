@@ -27,7 +27,17 @@
  *
  * @function vrzno_js_init
  * @returns {void}
+ * @throws {Error} The runtime does not provide WeakRef and FinalizationRegistry.
  */
+if(typeof globalThis.WeakRef !== 'function' || typeof globalThis.FinalizationRegistry !== 'function')
+{
+	throw new Error('Vrzno requires WeakRef and FinalizationRegistry. On Cloudflare, enable the enable_weak_ref compatibility flag or use compatibility_date >= 2025-05-05.');
+}
+
+// Capture the native APIs for every cache and PHP owner in this runtime instance.
+const WeakRef = globalThis.WeakRef;
+const FinalizationRegistry = globalThis.FinalizationRegistry;
+
 Module.hasVrzno = true;
 
 const IS_UNDEF    = 0;
@@ -103,12 +113,3 @@ Module.vrznoNormalizeArrayKey = key => {
 
 const origZval = Symbol('origZval');
 const proxyGeneration = Symbol('vrznoGeneration');
-
-/**
- * Uses native finalization when available. The fallback does no GC cleanup; request
- * shutdown still releases every owned zval explicitly.
- */
-const _FinalizationRegistry = globalThis.FinalizationRegistry || class { // Polyfill for cloudflare
-	register(){};
-	unregister(){};
-};

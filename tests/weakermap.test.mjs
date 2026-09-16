@@ -58,7 +58,7 @@ function withApis(apis, callback)
 	}
 }
 
-for(const source of ['embedded', 'npm'])
+for(const source of ['bundled adapter', 'npm'])
 {
 	test(`${source}: primitive keys, object/function values, and live replacement satisfy Vrzno's cache operations`, () => {
 		const Cache = source === 'npm' ? WeakerMap : bridge().module.WeakerMap;
@@ -129,18 +129,14 @@ test('the npm iterator API differs from the embedded snapshot-array API', () => 
 	assert.equal(iterator[Symbol.iterator](), iterator);
 });
 
-test('native weak-reference APIs are required by npm but optional for the embedded bridge', () => {
+test('missing native weak-reference APIs produce an actionable startup error', () => {
 	for(const apis of [
 		{WeakRef: undefined}
 		, {FinalizationRegistry: undefined}
 		, {WeakRef: undefined, FinalizationRegistry: undefined}
 	]){
-		const {module, functions} = bridge({globals: apis});
-		const value = {}, cache = new module.WeakerMap([[1, value]]);
-		assert.equal(cache.get(1), value);
-		module.ownedZvalRegistry.register(value, 100);
-		functions.vrzno_js_shutdown();
-		assert.equal(module.ownedZvalRegistry.outstanding, 0);
+		const value = {};
+		assert.throws(() => bridge({globals: apis}), /Vrzno requires WeakRef and FinalizationRegistry.*enable_weak_ref.*2025-05-05/);
 		withApis(apis, () => assert.throws(() => new WeakerMap([[1, value]]), /is not a constructor/));
 	}
 });

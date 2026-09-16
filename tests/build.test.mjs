@@ -5,10 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import {test} from 'node:test';
 import {parse} from 'espree';
-import {declarations, root, templates} from './lib/js-bridge.mjs';
+import {declarations, inputBody, root, templates} from './lib/js-bridge.mjs';
 
 const entries = declarations();
-const inputs = [...new Set(entries.flatMap(entry => entry.inputs))];
+const inputs = [...new Set(entries.flatMap(entry => entry.inputs))].filter(name => name !== 'vrzno_weakermap.js');
+const buildInputs = ['Makefile.frag', ...templates, ...inputs, 'vrzno_bundle.mjs', 'vrzno_weakermap.mjs', 'package.json', 'package-lock.json'];
 const units = templates.map(name => name.replace('_js.h.in', ''));
 const compiler = process.env.CC || 'emcc';
 const syntax = source => JSON.parse(JSON.stringify(parse(source, {
@@ -23,11 +24,13 @@ function fixture(t, outOfTree = false)
 	const build = outOfTree ? path.join(temporary, 'build') : source;
 	fs.mkdirSync(source);
 	fs.mkdirSync(build, {recursive: true});
-	for(const name of ['Makefile.frag', ...templates, ...inputs])
+	for(const name of buildInputs)
 		fs.copyFileSync(path.join(root, name), path.join(source, name));
 	const header = unit => path.join(build, `generated/${unit}_js.h`);
 	const depfile = unit => path.join(build, `generated/${unit}_js.d`);
 	const object = unit => path.join(build, `${unit}.lo`);
+	const bundle = path.join(build, 'generated/vrzno_weakermap.js');
+	const dependencies = ['esbuild/lib/main.js', 'weakermap/WeakerMap.mjs'].map(name => path.join(build, 'generated/npm/node_modules', name));
 	const fragment = fs.readFileSync(path.join(source, 'Makefile.frag'), 'utf8')
 		.replaceAll('$(srcdir)', source).replaceAll('$(builddir)', build);
 	fs.writeFileSync(path.join(build, 'Makefile'), `all: ${units.map(object).join(' ')}\ndistclean: clean\n`
@@ -45,11 +48,11 @@ function fixture(t, outOfTree = false)
 	const mtimes = () => outputs.map(file => fs.statSync(file, {bigint: true}).mtimeNs);
 	const prepareEdit = () => {
 		const past = new Date(Date.now() - 10000), newer = new Date(Date.now() - 5000);
-		for(const name of ['Makefile.frag', ...templates, ...inputs])
+		for(const name of buildInputs)
 			fs.utimesSync(path.join(source, name), past, past);
-		for(const file of outputs) fs.utimesSync(file, newer, newer);
+		for(const file of [...outputs, bundle, ...dependencies]) fs.utimesSync(file, newer, newer);
 	};
-	return {source, build, header, depfile, object, outputs, run, mtimes, prepareEdit};
+	return {source, build, header, depfile, object, bundle, dependencies, outputs, run, mtimes, prepareEdit};
 }
 
 for(const separate of [false, true])
@@ -67,7 +70,7 @@ for(const separate of [false, true])
 			const next = tail.search(/^EM_(?:ASYNC_)?JS\(/m);
 			const section = next < 0 ? tail : tail.slice(0, next);
 			const body = section.slice(0, section.lastIndexOf('\n});'));
-			assert.deepEqual(syntax(body), syntax(entry.inputs.map(name => fs.readFileSync(path.join(f.source, name), 'utf8')).join('\n')), entry.name);
+			assert.deepEqual(syntax(body), syntax(entry.inputs.map(name => inputBody(name, f.source)).join('\n')), entry.name);
 			for(const input of entry.inputs)
 				assert.ok(fs.readFileSync(f.depfile(unit), 'utf8').includes(input), input);
 		}
@@ -93,6 +96,39 @@ for(const separate of [false, true])
 		}
 	});
 }
+
+test('Make bundles the locked package and tracks adapter, builder, manifest, and dependency changes', t => {
+	const f = fixture(t, true);
+	f.run();
+	assert.equal(fs.existsSync(path.join(f.source, 'node_modules')), false);
+	assert.equal(fs.existsSync(path.join(f.build, 'generated/npm/node_modules/eslint')), false);
+	for(const name of ['vrzno_weakermap.mjs', 'vrzno_bundle.mjs', 'package.json', 'package-lock.json'])
+	{
+		f.prepareEdit();
+		const before = f.mtimes();
+		fs.appendFileSync(path.join(f.source, name), '\n');
+		f.run();
+		const after = f.mtimes();
+		for(let i = 0; i < units.length; i++)
+		{
+			if(units[i] === 'vrzno') assert.notEqual(after[3 * i + 2], before[3 * i + 2], name);
+			else assert.deepEqual(after.slice(3 * i, 3 * i + 3), before.slice(3 * i, 3 * i + 3), units[i]);
+		}
+	}
+	for(const name of [f.bundle, ...f.dependencies])
+	{
+		fs.unlinkSync(name);
+		f.run();
+		assert.ok(fs.existsSync(name), name);
+	}
+	const bundle = fs.readFileSync(f.bundle, 'utf8');
+	const header = fs.readFileSync(f.header('vrzno'), 'utf8');
+	fs.appendFileSync(path.join(f.source, 'vrzno_weakermap.mjs'), '\ninvalid JavaScript here!\n');
+	assert.match(f.run('all', false).stderr, /vrzno_weakermap.mjs/);
+	assert.equal(fs.readFileSync(f.bundle, 'utf8'), bundle);
+	assert.equal(fs.readFileSync(f.header('vrzno'), 'utf8'), header);
+	assert.equal(fs.existsSync(f.bundle + '.tmp'), false);
+});
 
 test('compiler dependency files track nested includes and preserve good outputs on errors', t => {
 	const f = fixture(t, true);
@@ -146,8 +182,10 @@ test('missing generated headers and dependency files are recreated independently
 test('clean targets work without source inputs or an installed compiler', t => {
 	const f = fixture(t);
 	f.run();
-	for(const name of [...templates, ...inputs]) fs.unlinkSync(path.join(f.source, name));
-	for(const goal of ['clean', 'distclean', 'clean-vrzno-js']) f.run(goal, true, ['CC=missing-compiler']);
+	for(const name of buildInputs.filter(name => name !== 'Makefile.frag')) fs.unlinkSync(path.join(f.source, name));
+	for(const goal of ['clean', 'distclean', 'clean-vrzno-js']) f.run(goal, true, ['CC=missing-compiler', 'NPM=missing-npm', 'NODE=missing-node']);
+	assert.equal(fs.existsSync(f.bundle), false);
+	assert.equal(fs.existsSync(path.join(f.build, 'generated/npm')), false);
 	for(const unit of units)
 	{
 		assert.equal(fs.existsSync(f.header(unit)), false);

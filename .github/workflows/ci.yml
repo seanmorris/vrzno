@@ -37,7 +37,7 @@ jobs:
       - name: Check embedded JavaScript style
         run: npm run lint
 
-      - name: Check Make embedding, JS contracts, and weakermap compatibility
+      - name: Check Make embedding, JS contracts, and bundled weakermap
         run: npm test
 
   build-and-test:
@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: seanmorris/php-wasm
-          ref: c17c614e57a5089f196c792f0a9f7f0b032dadef
+          ref: 40c63851e97f039bf9de7e8abebfb513c3f13fcf
           path: php-wasm
 
       - name: Configure php-wasm

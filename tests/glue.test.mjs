@@ -32,8 +32,8 @@ test('target references retain identity and release strong retention only at the
 	assert.ok(module.targets.add(object) > id);
 });
 
-test('explicit ownership release and shutdown work without native weak-reference APIs', () => {
-	const {module, functions, calls} = bridge({globals: {WeakRef: undefined, FinalizationRegistry: undefined}});
+test('explicit ownership release and shutdown work without waiting for garbage collection', () => {
+	const {module, functions, calls} = bridge();
 	const owner = {}, other = {};
 	module.ownedZvalRegistry.register(owner, 100);
 	module.ownedZvalRegistry.register(owner, 200);
