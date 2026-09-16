@@ -263,7 +263,9 @@ npm run lint
 npm test
 ```
 
-The style check uses the pinned npm `sm-no-saccade-style` recommended configuration.
+The style check uses the pinned npm `sm-no-saccade-style` recommended configuration
+for the bridge, build scripts, lint configuration, and tests. CI requires it to pass
+without warnings before native builds start.
 The Make tests cover separate build directories, every JS input's dependencies,
 parallel builds, missing inputs, recovery, clean targets, and object-only linking.
 `npm run test:weakermap` checks the [weakermap integration contract](docs/weakermap.md).

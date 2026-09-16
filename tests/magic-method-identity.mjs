@@ -133,7 +133,8 @@ test('Magic wrappers retain their receiver and reject calls after refresh', asyn
 	await php.refresh();
 	assert.equal(module.vrznoOwnershipStats().outstanding, 0);
 	assert.throws(() => callback(), {
-		name: 'ReferenceError', message: 'Vrzno value belongs to a previous PHP runtime.',
+		name: 'ReferenceError'
+		, message: 'Vrzno value belongs to a previous PHP runtime.'
 	});
 });
 

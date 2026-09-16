@@ -5,8 +5,8 @@ import { lifecycleFailures } from './lifecycle-process.mjs';
 
 const mode = process.argv[2];
 const staleValueError = {
-	name: 'ReferenceError',
-	message: 'Vrzno value belongs to a previous PHP runtime.',
+	name: 'ReferenceError'
+	, message: 'Vrzno value belongs to a previous PHP runtime.'
 };
 
 function controlledCollector()
@@ -73,11 +73,11 @@ function controlledCollector()
 	};
 
 	return {
-		WeakRef: ControlledWeakRef,
-		FinalizationRegistry: ControlledFinalizationRegistry,
-		queue,
-		flush,
-		collect(target, reverse = false) { queue(target); flush(reverse); },
+		WeakRef: ControlledWeakRef
+		, FinalizationRegistry: ControlledFinalizationRegistry
+		, queue
+		, flush
+		, collect(target, reverse = false) { queue(target); flush(reverse); }
 	};
 }
 
@@ -243,8 +243,8 @@ async function nativeCleanup(php, module)
 		await delay(10);
 		if(controlFinalized && control.deref() === undefined
 			&& references.every(reference => reference.deref() === undefined)
-			&& module.vrznoOwnershipStats().outstanding === baseline)
-		{
+			&& module.vrznoOwnershipStats().outstanding === baseline
+		){
 			return;
 		}
 	}
@@ -292,13 +292,16 @@ try
 		{
 			await controlledShutdown(php, runtime.module, collector);
 		}
-		else if(['controlled-callback-owner-first', 'controlled-callback-cache-first', 'controlled-explicit-release',
-			'negative-strong-cache', 'negative-disabled-finalizer'].includes(mode))
-		{
+		else if([
+			'controlled-callback-owner-first'
+			, 'controlled-callback-cache-first'
+			, 'controlled-explicit-release'
+			, 'negative-strong-cache'
+			, 'negative-disabled-finalizer'
+		].includes(mode)){
 			await controlledCallback(php, runtime.module, collector);
 		}
-		else
-		{
+		else{
 			throw new Error(`Unknown lifecycle mode: ${mode}`);
 		}
 	}
@@ -307,11 +310,11 @@ try
 catch(error)
 {
 	report = {
-		mode,
-		ok: false,
-		kind: error.lifecycleKind ?? (error.code === 'ERR_ASSERTION' ? 'assertion' : 'unexpected'),
-		message: error.message.split('\n')[0],
-		stack: error.stack,
+		mode
+		, ok: false
+		, kind: error.lifecycleKind ?? (error.code === 'ERR_ASSERTION' ? 'assertion' : 'unexpected')
+		, message: error.message.split('\n')[0]
+		, stack: error.stack
 	};
 	process.exitCode = 1;
 }
@@ -319,7 +322,10 @@ finally
 {
 	if(php)
 	{
-		try { await php.refresh(); }
+		try
+		{
+			await php.refresh();
+		}
 		catch(error)
 		{
 			report = {mode, ok: false, kind: 'cleanup', message: error.message};

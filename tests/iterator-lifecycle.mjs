@@ -4,8 +4,8 @@ import { PhpNode } from './lib/php-node.mjs';
 import { runLifecycleChild } from './lib/lifecycle-process.mjs';
 
 const staleValueError = {
-	name: 'ReferenceError',
-	message: 'Vrzno value belongs to a previous PHP runtime.',
+	name: 'ReferenceError'
+	, message: 'Vrzno value belongs to a previous PHP runtime.'
 };
 
 test('Detached array factories retain independent iterator owners', async context => {

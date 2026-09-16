@@ -24,8 +24,8 @@ test('Vrzno extension smoke test', async () => {
 	await php.binary;
 
 	const value = {
-		nil: null,
-		add: (left, right) => left + right,
+		nil: null
+		, add: (left, right) => left + right
 	};
 
 	const exitCode = await php.r`<?php

@@ -12,10 +12,10 @@ test('The same PHP closure can be added and removed as an event listener', async
 	const callbacks = [];
 	let calls = 0;
 	const bridge = {
-		listeners,
-		remember(callback) { callbacks.push(callback); },
-		called() { calls++; },
-		fire() { listeners.dispatchEvent(new Event('ping')); },
+		listeners
+		, remember(callback) { callbacks.push(callback); }
+		, called() { calls++; }
+		, fire() { listeners.dispatchEvent(new Event('ping')); }
 	};
 
 	assert.equal(await php.r`<?php
@@ -140,8 +140,8 @@ test('Refresh clears callable identity and rejects stale wrappers', async contex
 
 	assert.equal(module.vrznoOwnershipStats().outstanding, 0);
 	assert.throws(() => previous(), {
-		name: 'ReferenceError',
-		message: 'Vrzno value belongs to a previous PHP runtime.',
+		name: 'ReferenceError'
+		, message: 'Vrzno value belongs to a previous PHP runtime.'
 	});
 	const current = await php.x`fn() => 'current'`;
 	assert.notEqual(current, previous);

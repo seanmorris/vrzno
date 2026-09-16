@@ -6,16 +6,16 @@ const childPath = fileURLToPath(new URL('./lifecycle-child.mjs', import.meta.url
 const resultPrefix = 'VRZNO_LIFECYCLE_RESULT ';
 
 export const lifecycleFailures = {
-	strongCache: 'Re-export after collection must create a fresh wrapper',
-	disabledFinalizer: 'Collected callback must release its PHP owner',
+	strongCache: 'Re-export after collection must create a fresh wrapper'
+	, disabledFinalizer: 'Collected callback must release its PHP owner'
 };
 
 export async function runLifecycleChild(mode, expectedFailure)
 {
 	const result = await new Promise((resolve, reject) => {
 		const child = spawn(process.execPath, ['--expose-gc', childPath, mode], {
-			env: process.env,
-			stdio: ['ignore', 'pipe', 'pipe'],
+			env: process.env
+			, stdio: ['ignore', 'pipe', 'pipe']
 		});
 		let stdout = '';
 		let stderr = '';

@@ -23,7 +23,7 @@ export const capture = php => {
 	php.addEventListener('output', event => event.detail.forEach(line => void (stdout += line)));
 	php.addEventListener('error', event => event.detail.forEach(line => void (stderr += line)));
 	return {
-		get stdout() { return stdout; },
-		get stderr() { return stderr; },
+		get stdout() { return stdout; }
+		, get stderr() { return stderr; }
 	};
 };

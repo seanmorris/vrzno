@@ -34,7 +34,7 @@ jobs:
       - name: Install development tools
         run: npm ci
 
-      - name: Check embedded JavaScript style
+      - name: Check JavaScript style
         run: npm run lint
 
       - name: Check Make embedding, JS contracts, and bundled weakermap
