@@ -241,7 +241,7 @@ at shutdown independently of garbage collection.
 
 ## Building And Testing
 
-The bridge's JavaScript lives in root-level `.js` files. The five `*_js.h.in`
+The bridge's JavaScript lives in `js/`. The five `*_js.h.in`
 templates declare the native signatures and include those bodies. The initialization
 template combines the cache, ownership, proxy, callback, and conversion helpers in
 one scope. JSDoc describes target handles, Wasm pointers, ownership, and async results.
@@ -252,7 +252,7 @@ dependency files live under the extension's build directory in `generated/`.
 The resulting native objects contain the JS; linking them needs no source files,
 `--js-library` option, or runtime npm import. Building requires GNU Make 4.3 or newer
 for grouped targets, Node, and npm. Make installs the locked build dependencies in
-`generated/npm` and bundles `weakermap` plus `vrzno_weakermap.mjs` with esbuild.
+`generated/npm` and bundles `weakermap` plus `js/vrzno_weakermap.mjs` with esbuild.
 The source checkout is unchanged, including when using a separate build directory.
 
 Run the fast checks with Emscripten 6.0.6 available as `emcc`:

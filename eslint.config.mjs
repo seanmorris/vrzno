@@ -4,7 +4,7 @@ import {parse} from 'espree';
 export default [
 	...smNoSaccadeStyle.configs.recommended
 	, {
-		files: ['vrzno_*.js', 'php_stream_fetch_real_open.js']
+		files: ['js/*.js']
 		, languageOptions: {
 			// These files are function bodies embedded by EM_JS/EM_ASYNC_JS.
 			sourceType: 'module'

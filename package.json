@@ -2,7 +2,7 @@
 	"name": "vrzno-bridge",
 	"private": true,
 	"scripts": {
-		"lint": "eslint vrzno_*.js vrzno_*.mjs php_stream_fetch_real_open.js eslint.config.mjs tests/ --max-warnings=0",
+		"lint": "eslint js/ eslint.config.mjs tests/ --max-warnings=0",
 		"lint:fix": "npm run lint -- --fix",
 		"test": "node --test tests/*.test.mjs",
 		"test:integration": "node --expose-gc --test tests/integration.mjs tests/ownership.mjs tests/callback-identity.mjs tests/magic-method-identity.mjs tests/iterator-lifecycle.mjs tests/lifecycle-contract.mjs",

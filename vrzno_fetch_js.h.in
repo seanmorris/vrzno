@@ -1,40 +1,40 @@
 /* Expanded by Make before Emscripten stringifies these function bodies. */
 EM_JS(ssize_t, vrzno_js_fetch_read, (vrzno_target_id targetId, char * bufferAddress, size_t offset, size_t requestedCount), {
-#include "vrzno_fetch_read.js"
+#include "js/vrzno_fetch_read.js"
 });
 
 EM_JS(void, vrzno_js_fetch_release, (vrzno_target_id targetId), {
-#include "vrzno_fetch_release.js"
+#include "js/vrzno_fetch_release.js"
 });
 
 EM_ASYNC_JS(vrzno_target_id, php_stream_fetch_real_open, (const char * path, vrzno_target_id context_id, size_t ptrsize, char *** headersv, size_t * headersc), {
-#include "php_stream_fetch_real_open.js"
+#include "js/php_stream_fetch_real_open.js"
 });
 
 EM_JS(vrzno_target_id, vrzno_js_fetch_context, (void), {
-#include "vrzno_fetch_context.js"
+#include "js/vrzno_fetch_context.js"
 });
 
 EM_JS(void, vrzno_js_fetch_method, (vrzno_target_id contextId, const char * nameAddress), {
-#include "vrzno_fetch_method.js"
+#include "js/vrzno_fetch_method.js"
 });
 
 EM_JS(void, vrzno_js_fetch_header, (vrzno_target_id contextId, const char * nameAddress), {
-#include "vrzno_fetch_header.js"
+#include "js/vrzno_fetch_header.js"
 });
 
 EM_JS(void, vrzno_js_fetch_headers, (vrzno_target_id contextId, const char * nameAddress), {
-#include "vrzno_fetch_headers.js"
+#include "js/vrzno_fetch_headers.js"
 });
 
 EM_JS(void, vrzno_js_fetch_body, (vrzno_target_id contextId, const char * bodyAddress, size_t bodyLength), {
-#include "vrzno_fetch_body.js"
+#include "js/vrzno_fetch_body.js"
 });
 
 EM_JS(void, vrzno_js_fetch_ignore_errors, (vrzno_target_id contextId, bool ignoreErrorsArgument), {
-#include "vrzno_fetch_ignore_errors.js"
+#include "js/vrzno_fetch_ignore_errors.js"
 });
 
 EM_JS(int, vrzno_js_fetch_status, (vrzno_target_id targetId), {
-#include "vrzno_fetch_status.js"
+#include "js/vrzno_fetch_status.js"
 });

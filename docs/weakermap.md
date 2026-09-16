@@ -27,7 +27,7 @@ php-wasm's Pages configuration and workerd tests explicitly enable that flag.
 
 ## Preserved contracts
 
-`vrzno_weakermap.mjs` is a small adapter preserving Vrzno's `keys()` and `values()`
+`js/vrzno_weakermap.mjs` is a small adapter preserving Vrzno's `keys()` and `values()`
 snapshot arrays and its existing entry-iterator shape. The npm package supplies
 the cache storage, weak references, finalization, replacement handling, and pruning.
 `Module.WeakerMap` can still be supplied by callers.
@@ -36,8 +36,8 @@ Initialization captures the runtime's weak-reference constructors. The bundle
 shares that lexical scope, so later changes to host globals cannot mix different
 collectors in one runtime. This also preserves the controlled lifecycle tests.
 
-`vrzno_targets.js` still manages stable numeric IDs and explicit PHP-side reference
-counts. `vrzno_ownership.js` still owns copied PHP zvals, destroys each exactly once,
+`js/vrzno_targets.js` still manages stable numeric IDs and explicit PHP-side reference
+counts. `js/vrzno_ownership.js` still owns copied PHP zvals, destroys each exactly once,
 and releases outstanding owners at shutdown without depending on GC timing.
 A weak-value cache does not replace either contract.
 

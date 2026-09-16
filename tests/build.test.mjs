@@ -9,7 +9,7 @@ import {declarations, inputBody, root, templates} from './lib/js-bridge.mjs';
 
 const entries = declarations();
 const inputs = [...new Set(entries.flatMap(entry => entry.inputs))].filter(name => name !== 'vrzno_weakermap.js');
-const buildInputs = ['Makefile.frag', ...templates, ...inputs, 'vrzno_bundle.mjs', 'vrzno_weakermap.mjs', 'package.json', 'package-lock.json'];
+const buildInputs = ['Makefile.frag', ...templates, ...inputs, 'js/vrzno_bundle.mjs', 'js/vrzno_weakermap.mjs', 'package.json', 'package-lock.json'];
 const units = templates.map(name => name.replace('_js.h.in', ''));
 const compiler = process.env.CC || 'emcc';
 const syntax = source => JSON.parse(JSON.stringify(parse(source, {
@@ -25,7 +25,10 @@ function fixture(t, outOfTree = false)
 	fs.mkdirSync(source);
 	fs.mkdirSync(build, {recursive: true});
 	for(const name of buildInputs)
+	{
+		fs.mkdirSync(path.dirname(path.join(source, name)), {recursive: true});
 		fs.copyFileSync(path.join(root, name), path.join(source, name));
+	}
 	const header = unit => path.join(build, `generated/${unit}_js.h`);
 	const depfile = unit => path.join(build, `generated/${unit}_js.d`);
 	const object = unit => path.join(build, `${unit}.lo`);
@@ -102,7 +105,7 @@ test('Make bundles the locked package and tracks adapter, builder, manifest, and
 	f.run();
 	assert.equal(fs.existsSync(path.join(f.source, 'node_modules')), false);
 	assert.equal(fs.existsSync(path.join(f.build, 'generated/npm/node_modules/eslint')), false);
-	for(const name of ['vrzno_weakermap.mjs', 'vrzno_bundle.mjs', 'package.json', 'package-lock.json'])
+	for(const name of ['js/vrzno_weakermap.mjs', 'js/vrzno_bundle.mjs', 'package.json', 'package-lock.json'])
 	{
 		f.prepareEdit();
 		const before = f.mtimes();
@@ -123,7 +126,7 @@ test('Make bundles the locked package and tracks adapter, builder, manifest, and
 	}
 	const bundle = fs.readFileSync(f.bundle, 'utf8');
 	const header = fs.readFileSync(f.header('vrzno'), 'utf8');
-	fs.appendFileSync(path.join(f.source, 'vrzno_weakermap.mjs'), '\ninvalid JavaScript here!\n');
+	fs.appendFileSync(path.join(f.source, 'js/vrzno_weakermap.mjs'), '\ninvalid JavaScript here!\n');
 	assert.match(f.run('all', false).stderr, /vrzno_weakermap.mjs/);
 	assert.equal(fs.readFileSync(f.bundle, 'utf8'), bundle);
 	assert.equal(fs.readFileSync(f.header('vrzno'), 'utf8'), header);
@@ -158,7 +161,7 @@ test('directives-only preprocessing preserves JS macro names, comments, and temp
 	const f = fixture(t);
 	const body = 'const sample = {__LINE__: 17, __FILE__: "kept", __COUNTER__: 23, unix: 29};\n'
 		+ '/* keep comment */\nconst $value = `literal ${sample.__LINE__} \\n`;\n';
-	fs.appendFileSync(path.join(f.source, 'vrzno_shutdown.js'), body);
+	fs.appendFileSync(path.join(f.source, 'js/vrzno_shutdown.js'), body);
 	f.run();
 	assert.ok(fs.readFileSync(f.header('vrzno'), 'utf8').includes(body));
 });

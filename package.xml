@@ -33,6 +33,16 @@
    <file name="LICENSE" role="doc" />
    <file name="README.md" role="doc" />
    <file name="banner.jpg" role="doc" />
+   <file name="NOTICE" role="doc" />
+   <file name="Makefile.frag" role="src" />
+   <file name="package.json" role="src" />
+   <file name="package-lock.json" role="src" />
+   <file name="eslint.config.mjs" role="src" />
+   <file name="vrzno_array_js.h.in" role="src" />
+   <file name="vrzno_fetch_js.h.in" role="src" />
+   <file name="vrzno_functions_js.h.in" role="src" />
+   <file name="vrzno_js.h.in" role="src" />
+   <file name="vrzno_object_js.h.in" role="src" />
    <file name="config.m4" role="src" />
    <file name="php_vrzno.h" role="src" />
    <file name="vrzno.c" role="src" />
@@ -45,7 +55,64 @@
    <file name="vrzno_functions.c" role="src" />
    <file name="vrzno_object.c" role="src" />
    <file name="vrzno_private.h" role="src" />
+   <dir name="js">
+    <file name="php_stream_fetch_real_open.js" role="src" />
+    <file name="vrzno_array_append.js" role="src" />
+    <file name="vrzno_array_current.js" role="src" />
+    <file name="vrzno_array_valid.js" role="src" />
+    <file name="vrzno_await_internal.js" role="src" />
+    <file name="vrzno_bundle.mjs" role="src" />
+    <file name="vrzno_callbacks.js" role="src" />
+    <file name="vrzno_class_lookup.js" role="src" />
+    <file name="vrzno_class_register.js" role="src" />
+    <file name="vrzno_construct.js" role="src" />
+    <file name="vrzno_env.js" role="src" />
+    <file name="vrzno_eval.js" role="src" />
+    <file name="vrzno_fetch_body.js" role="src" />
+    <file name="vrzno_fetch_context.js" role="src" />
+    <file name="vrzno_fetch_header.js" role="src" />
+    <file name="vrzno_fetch_headers.js" role="src" />
+    <file name="vrzno_fetch_ignore_errors.js" role="src" />
+    <file name="vrzno_fetch_method.js" role="src" />
+    <file name="vrzno_fetch_read.js" role="src" />
+    <file name="vrzno_fetch_release.js" role="src" />
+    <file name="vrzno_fetch_status.js" role="src" />
+    <file name="vrzno_import.js" role="src" />
+    <file name="vrzno_index_has.js" role="src" />
+    <file name="vrzno_index_read.js" role="src" />
+    <file name="vrzno_index_unset.js" role="src" />
+    <file name="vrzno_index_write.js" role="src" />
+    <file name="vrzno_init.js" role="src" />
+    <file name="vrzno_invoke.js" role="src" />
+    <file name="vrzno_key_has.js" role="src" />
+    <file name="vrzno_key_read.js" role="src" />
+    <file name="vrzno_key_unset.js" role="src" />
+    <file name="vrzno_key_write.js" role="src" />
+    <file name="vrzno_magic_get.js" role="src" />
+    <file name="vrzno_method_call.js" role="src" />
+    <file name="vrzno_object_create.js" role="src" />
+    <file name="vrzno_object_release.js" role="src" />
+    <file name="vrzno_ownership.js" role="src" />
+    <file name="vrzno_php_arrays.js" role="src" />
+    <file name="vrzno_php_objects.js" role="src" />
+    <file name="vrzno_properties_json.js" role="src" />
+    <file name="vrzno_property_has.js" role="src" />
+    <file name="vrzno_property_read.js" role="src" />
+    <file name="vrzno_property_unset.js" role="src" />
+    <file name="vrzno_property_write.js" role="src" />
+    <file name="vrzno_run.js" role="src" />
+    <file name="vrzno_shared.js" role="src" />
+    <file name="vrzno_shutdown.js" role="src" />
+    <file name="vrzno_targets.js" role="src" />
+    <file name="vrzno_timeout.js" role="src" />
+    <file name="vrzno_to_string.js" role="src" />
+    <file name="vrzno_values.js" role="src" />
+    <file name="vrzno_weakermap.mjs" role="src" />
+   </dir>
    <dir name="tests">
+    <file name="build.test.mjs" role="test" />
+    <file name="glue.test.mjs" role="test" />
+    <file name="weakermap.test.mjs" role="test" />
     <file name="001.phpt" role="test" />
     <file name="002.phpt" role="test" />
     <file name="callback-identity.mjs" role="test" />
@@ -55,6 +122,7 @@
     <file name="magic-method-identity.mjs" role="test" />
     <file name="ownership.mjs" role="test" />
     <dir name="lib">
+     <file name="js-bridge.mjs" role="test" />
      <file name="lifecycle-child.mjs" role="test" />
      <file name="lifecycle-process.mjs" role="test" />
      <file name="php-node.mjs" role="test" />

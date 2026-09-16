@@ -1,15 +1,15 @@
 /* Expanded by Make before Emscripten stringifies these function bodies. */
 EM_JS(void, vrzno_js_shutdown, (void), {
-#include "vrzno_shutdown.js"
+#include "js/vrzno_shutdown.js"
 });
 
 EM_JS(void, vrzno_js_init, (void), {
-#include "vrzno_init.js"
+#include "js/vrzno_init.js"
 #include "vrzno_weakermap.js"
-#include "vrzno_ownership.js"
-#include "vrzno_php_objects.js"
-#include "vrzno_php_arrays.js"
-#include "vrzno_callbacks.js"
-#include "vrzno_values.js"
-#include "vrzno_targets.js"
+#include "js/vrzno_ownership.js"
+#include "js/vrzno_php_objects.js"
+#include "js/vrzno_php_arrays.js"
+#include "js/vrzno_callbacks.js"
+#include "js/vrzno_values.js"
+#include "js/vrzno_targets.js"
 });

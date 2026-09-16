@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: seanmorris/php-wasm
-          ref: 40c63851e97f039bf9de7e8abebfb513c3f13fcf
+          ref: 3e6add7de581ad183d99fd7869392bceaf979059
           path: php-wasm
 
       - name: Configure php-wasm

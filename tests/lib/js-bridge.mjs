@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import {fileURLToPath} from 'node:url';
-import {bundleWeakermap} from '../../vrzno_bundle.mjs';
+import {bundleWeakermap} from '../../js/vrzno_bundle.mjs';
 
 export const root = fileURLToPath(new URL('../../', import.meta.url));
 export const templates = fs.readdirSync(root).filter(name => name.endsWith('_js.h.in')).sort();
-const cacheBundle = await bundleWeakermap(root, path.join(root, 'node_modules'));
+const cacheBundle = await bundleWeakermap(path.join(root, 'js'), path.join(root, 'node_modules'));
 
 /** Read a bridge input, generating the npm bundle with the same builder as Make. */
 export function inputBody(name, directory = root)

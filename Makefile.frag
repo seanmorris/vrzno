@@ -21,11 +21,11 @@ $(VRZNO_JS_NPM_FILES) &: $(srcdir)/package.json $(srcdir)/package-lock.json
 	$(NPM) ci --prefix "$(VRZNO_JS_NPM_DIR)" --omit=dev --ignore-scripts --no-audit --no-fund
 	@touch $(VRZNO_JS_NPM_FILES)
 
-$(VRZNO_JS_BUNDLE): $(srcdir)/vrzno_weakermap.mjs $(srcdir)/vrzno_bundle.mjs $(VRZNO_JS_NPM_FILES)
+$(VRZNO_JS_BUNDLE): $(srcdir)/js/vrzno_weakermap.mjs $(srcdir)/js/vrzno_bundle.mjs $(VRZNO_JS_NPM_FILES)
 	@mkdir -p "$(builddir)/generated"
 	@set -eu; \
 		trap 'rm -f "$@.tmp"' 0 1 2 3 15; \
-		$(NODE) "$(srcdir)/vrzno_bundle.mjs" "$(srcdir)" "$(VRZNO_JS_NPM_DIR)/node_modules" "$@.tmp"; \
+		$(NODE) "$(srcdir)/js/vrzno_bundle.mjs" "$(srcdir)/js" "$(VRZNO_JS_NPM_DIR)/node_modules" "$@.tmp"; \
 		mv "$@.tmp" "$@"
 
 $(builddir)/generated/vrzno_js.h $(builddir)/generated/vrzno_js.d: $(VRZNO_JS_BUNDLE)
