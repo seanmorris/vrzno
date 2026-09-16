@@ -1,0 +1,8 @@
+/* Expanded by Make before Emscripten stringifies these function bodies. */
+EM_JS(int, vrzno_js_array_valid, (vrzno_target_id targetId, zend_long index), {
+#include "vrzno_array_valid.js"
+});
+
+EM_JS(void, vrzno_js_array_current, (vrzno_target_id targetId, zend_long index, zval * resultAddress), {
+#include "vrzno_array_current.js"
+});

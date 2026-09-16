@@ -1,0 +1,92 @@
+/* Expanded by Make before Emscripten stringifies these function bodies. */
+EM_JS(vrzno_target_id, vrzno_js_object_create, (zend_class_entry * classAddress), {
+#include "vrzno_object_create.js"
+});
+
+EM_JS(zend_class_entry *, vrzno_js_class_lookup, (vrzno_target_id targetId), {
+#include "vrzno_class_lookup.js"
+});
+
+EM_JS(void, vrzno_js_class_register, (vrzno_target_id targetId, zend_class_entry * classAddress), {
+#include "vrzno_class_register.js"
+});
+
+EM_JS(void, vrzno_js_object_release, (vrzno_target_id targetId), {
+#include "vrzno_object_release.js"
+});
+
+EM_JS(void, vrzno_js_property_read, (vrzno_target_id targetId, const char * nameAddress, zval * resultAddress), {
+#include "vrzno_property_read.js"
+});
+
+EM_JS(void, vrzno_js_property_write, (vrzno_target_id targetId, const char * nameAddress, zval * valueAddress, int valueType), {
+#include "vrzno_property_write.js"
+});
+
+EM_JS(void, vrzno_js_index_read, (vrzno_target_id targetId, zend_long index, zval * resultAddress), {
+#include "vrzno_index_read.js"
+});
+
+EM_JS(void, vrzno_js_key_read, (vrzno_target_id targetId, const char * nameAddress, zval * resultAddress), {
+#include "vrzno_key_read.js"
+});
+
+EM_JS(void, vrzno_js_array_append, (vrzno_target_id targetId, zval * valueAddress), {
+#include "vrzno_array_append.js"
+});
+
+EM_JS(void, vrzno_js_index_write, (vrzno_target_id targetId, zend_long index, zval * valueAddress), {
+#include "vrzno_index_write.js"
+});
+
+EM_JS(void, vrzno_js_key_write, (vrzno_target_id targetId, const char * nameAddress, zval * valueAddress), {
+#include "vrzno_key_write.js"
+});
+
+EM_JS(int, vrzno_js_index_has, (vrzno_target_id targetId, zend_long index, int checkEmpty), {
+#include "vrzno_index_has.js"
+});
+
+EM_JS(int, vrzno_js_key_has, (vrzno_target_id targetId, const char * nameAddress, int checkEmpty), {
+#include "vrzno_key_has.js"
+});
+
+EM_JS(void, vrzno_js_property_unset, (vrzno_target_id targetId, const char * nameAddress), {
+#include "vrzno_property_unset.js"
+});
+
+EM_JS(void, vrzno_js_index_unset, (vrzno_target_id targetId, zend_long index), {
+#include "vrzno_index_unset.js"
+});
+
+EM_JS(void, vrzno_js_key_unset, (vrzno_target_id targetId, const char * nameAddress), {
+#include "vrzno_key_unset.js"
+});
+
+EM_JS(char *, vrzno_js_properties_json, (vrzno_target_id targetId), {
+#include "vrzno_properties_json.js"
+});
+
+EM_JS(int, vrzno_js_property_has, (vrzno_target_id targetId, const char * nameAddress, int checkMode), {
+#include "vrzno_property_has.js"
+});
+
+EM_JS(void, vrzno_js_magic_get, (vrzno_target_id targetId, const char * nameAddress, zval * resultAddress), {
+#include "vrzno_magic_get.js"
+});
+
+EM_JS(void, vrzno_js_method_call, (vrzno_target_id targetId, const char * nameAddress, zval ** argumentsAddress, int argumentCount, size_t elementSize, zval * resultAddress), {
+#include "vrzno_method_call.js"
+});
+
+EM_JS(void, vrzno_js_invoke, (vrzno_target_id targetId, zval * valuesAddress, int argumentCount, size_t elementSize, zval * resultAddress), {
+#include "vrzno_invoke.js"
+});
+
+EM_JS(vrzno_target_id, vrzno_js_construct, (zend_class_entry * classAddress, zval * valuesAddress, int argumentCount, size_t elementSize), {
+#include "vrzno_construct.js"
+});
+
+EM_JS(char *, vrzno_js_to_string, (vrzno_target_id targetId), {
+#include "vrzno_to_string.js"
+});

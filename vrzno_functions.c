@@ -1,4 +1,5 @@
 #include "vrzno_private.h"
+#include <vrzno_functions_js.h>
 
 /* Legacy compatibility helper. */
 PHP_FUNCTION(vrzno_eval)
@@ -11,24 +12,7 @@ PHP_FUNCTION(vrzno_eval)
 		Z_PARAM_STRING(js_code, js_code_len)
 	ZEND_PARSE_PARAMETERS_END();
 
-	char *js_ret = EM_ASM_PTR({
-		try
-		{
-			const str = String(eval(UTF8ToString($0)));
-			const len = lengthBytesUTF8(str) + 1;
-			const loc = _malloc(len);
-
-			stringToUTF8(str, loc, len);
-
-			return loc;
-		}
-		catch(error)
-		{
-			Module.vrznoThrowRuntimeError(error);
-			return 0;
-		}
-
-	}, js_code);
+	char *js_ret = vrzno_js_eval(js_code);
 
 	if(!js_ret)
 	{
@@ -75,35 +59,7 @@ PHP_FUNCTION(vrzno_run)
 	smart_str_0(&buf);
 	char *js_args = ZSTR_VAL(buf.s);
 
-	char *js_ret = EM_ASM_PTR({
-
-		const funcName = UTF8ToString($0);
-		const argJson  = UTF8ToString($1);
-
-		try
-		{
-			const func = globalThis[funcName];
-			if(typeof func !== 'function')
-			{
-				throw new TypeError(`${funcName} is not a global JavaScript function`);
-			}
-			const args = JSON.parse(argJson || '[]') || [];
-
-			const str = String(func(...args));
-			const len = lengthBytesUTF8(str) + 1;
-			const loc = _malloc(len);
-
-			stringToUTF8(str, loc, len);
-
-			return loc;
-		}
-		catch(error)
-		{
-			Module.vrznoThrowRuntimeError(error);
-			return 0;
-		}
-
-	}, js_funcname, js_args);
+	char *js_ret = vrzno_js_run(js_funcname, js_args);
 
 	if(js_argv == &empty_argv)
 	{
@@ -149,52 +105,8 @@ PHP_FUNCTION(vrzno_timeout)
 
 	zval *owned_callback = vrzno_expose_copy_zval(callback);
 
-	EM_ASM({
-		const timeout = $0;
-		const ownedCallback = $1;
-		const generation = Module.vrznoGeneration;
-		const token = {};
-		Module.ownedZvalRegistry.register(token, ownedCallback, token);
-
-		setTimeout(()=>{
-			try
-			{
-				if(generation !== Module.vrznoGeneration)
-				{
-					return;
-				}
-
-				const zv = Module.ccall(
-					'vrzno_exec_zval_callback'
-					, 'number'
-					, ['number','number','number']
-					, [ownedCallback, 0, 0]
-				);
-
-				Module.vrznoDestroyZval(zv);
-			}
-			finally
-			{
-				Module.ownedZvalRegistry.release(token);
-			}
-
-		}, timeout);
-
-	}, timeout, owned_callback);
+	vrzno_js_timeout(timeout, owned_callback);
 }
-
-EM_ASYNC_JS(void, vrzno_await_internal, (vrzno_target_id targetId, zval *rv), {
-	try
-	{
-		const target = Module.targets.get(targetId);
-		const result = await target;
-		Module.jsToZval(result, rv);
-	}
-	catch(error)
-	{
-		Module.vrznoThrowRuntimeError(error);
-	}
-});
 
 PHP_FUNCTION(vrzno_await)
 {
@@ -223,17 +135,7 @@ PHP_FUNCTION(vrzno_env)
 	ZEND_PARSE_PARAMETERS_END();
 
 	ZVAL_NULL(return_value);
-	EM_ASM({
-		try
-		{
-			const name = UTF8ToString($0);
-			Module.jsToZval(Module[name], $1);
-		}
-		catch(error)
-		{
-			Module.vrznoThrowRuntimeError(error);
-		}
-	}, name, return_value);
+	vrzno_js_env(name, return_value);
 
 	if(EG(exception))
 	{
@@ -251,17 +153,7 @@ PHP_FUNCTION(vrzno_shared)
 	ZEND_PARSE_PARAMETERS_END();
 
 	ZVAL_NULL(return_value);
-	EM_ASM({
-		try
-		{
-			const name = UTF8ToString($0);
-			Module.jsToZval(Module.shared[name], $1);
-		}
-		catch(error)
-		{
-			Module.vrznoThrowRuntimeError(error);
-		}
-	}, name, return_value);
+	vrzno_js_shared(name, return_value);
 
 	if(EG(exception))
 	{
@@ -279,17 +171,7 @@ PHP_FUNCTION(vrzno_import)
 	ZEND_PARSE_PARAMETERS_END();
 
 	ZVAL_NULL(return_value);
-	EM_ASM({
-		try
-		{
-			const name = UTF8ToString($0);
-			Module.jsToZval(import(name), $1);
-		}
-		catch(error)
-		{
-			Module.vrznoThrowRuntimeError(error);
-		}
-	}, name, return_value);
+	vrzno_js_import(name, return_value);
 
 	if(EG(exception))
 	{

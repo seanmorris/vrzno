@@ -1,4 +1,5 @@
 #include "vrzno_private.h"
+#include <vrzno_array_js.h>
 
 typedef struct vrzno_array_iterator {
 	zend_object_iterator it;
@@ -25,31 +26,7 @@ static zend_result vrzno_array_it_valid(zend_object_iterator *it)
 	zend_object  *object = Z_OBJ(it->data);
 	vrzno_object *vrzno  = vrzno_fetch_object(object);
 
-	int valid = EM_ASM_INT({
-		let target = Module.targets.get($0);
-		const property = $1;
-
-		if(target instanceof ArrayBuffer)
-		{
-			if(!Module.bufferMaps.has(target))
-			{
-				Module.bufferMaps.set(target, new Uint8Array(target));
-			}
-
-			target = Module.bufferMaps.get(target);
-		}
-
-		if(Array.isArray(target) || ArrayBuffer.isView(target))
-		{
-			if(property >=0 && property < target.length)
-			{
-				return 1;
-			}
-		}
-
-		return 0;
-
-	}, vrzno->targetId, iter->key);
+	int valid = vrzno_js_array_valid(vrzno->targetId, iter->key);
 
 	if(valid)
 	{
@@ -69,24 +46,7 @@ static zval *vrzno_array_it_get_current_data(zend_object_iterator *it)
 		ZVAL_UNDEF(&iter->value);
 	}
 
-	EM_ASM({
-		let target = Module.targets.get($0);
-		const property = $1;
-		const rv = $2;
-
-		if(target instanceof ArrayBuffer)
-		{
-			if(!Module.bufferMaps.has(target))
-			{
-				Module.bufferMaps.set(target, new Uint8Array(target));
-			}
-
-			target = Module.bufferMaps.get(target);
-		}
-
-		return Module.jsToZval(target[property], rv);
-
-	}, vrzno_fetch_object(Z_OBJ(it->data))->targetId, iter->key, &iter->value);
+	vrzno_js_array_current(vrzno_fetch_object(Z_OBJ(it->data))->targetId, iter->key, &iter->value);
 
 	return &iter->value;
 }

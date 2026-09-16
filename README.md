@@ -234,6 +234,31 @@ Vrzno 0.2 supports PHP 8.0 through 8.5 compiled for Emscripten's wasm32 memory m
 
 ## Building And Testing
 
+The bridge's JavaScript lives in root-level `.js` files. The five `*_js.h.in`
+templates declare the native signatures and include those bodies. The initialization
+template combines the cache, ownership, proxy, callback, and conversion helpers in
+one scope. JSDoc describes target handles, Wasm pointers, ownership, and async results.
+
+PHP's Make build runs Emscripten's directives-only C preprocessor to expand the
+includes before `EM_JS`/`EM_ASYNC_JS` stringify the bodies. Generated headers and
+dependency files live under the extension's build directory in `generated/`.
+The resulting native objects contain the JS; linking them needs no source files,
+`--js-library` option, or runtime npm import. Building requires GNU Make 4.3 or newer
+for grouped targets. npm is used only for development checks.
+
+Run the fast checks with Emscripten 6.0.6 available as `emcc`:
+
+```sh
+npm ci
+npm run lint
+npm test
+```
+
+The style check uses the pinned npm `sm-no-saccade-style` recommended configuration.
+The Make tests cover separate build directories, every JS input's dependencies,
+parallel builds, missing inputs, recovery, clean targets, and object-only linking.
+`npm run test:weakermap` repeats the [weakermap compatibility evaluation](docs/weakermap.md).
+
 Use a neighboring `php-wasm` checkout as the build harness:
 
 ```sh
@@ -248,10 +273,10 @@ Run this repository's regression suite against the freshly built runtime:
 
 ```bash
 cd ../vrzno
-PHP_VERSION=8.4 PHP_WASM_ROOT=../php-wasm node --expose-gc --test tests/*.mjs
+PHP_VERSION=8.4 PHP_WASM_ROOT=../php-wasm npm run test:integration
 ```
 
-The CI matrix compiles and runs these tests on the oldest and newest supported PHP releases using Node 22.23.2. They cover callback identity (including magic methods) and listener removal, detached iterator lifetimes, runtime refresh, and owned expression-result cleanup. Both controlled lifecycle tests and native garbage-collection tests are required. Negative controls verify that a strong callback cache or disabled finalization fails the expected assertion. Native GC tests fail on timeout or missing GC support; they never turn a possible leak into a skipped test.
+CI first runs the style and fast bridge checks on Node 22.23.2 and 24.5.0. The native matrix then compiles and runs the integration tests on the oldest and newest supported PHP releases using Node 22.23.2. They cover callback identity (including magic methods) and listener removal, detached iterator lifetimes, runtime refresh, and owned expression-result cleanup. Both controlled lifecycle tests and native garbage-collection tests are required. Negative controls verify that a strong callback cache or disabled finalization fails the expected assertion. Native GC tests fail on timeout or missing GC support; they never turn a possible leak into a skipped test.
 
 Before sending a change, regenerate `vrzno_arginfo.h` if `vrzno.stub.php` changed, run both test suites, and confirm `git diff --check` is clean.
 

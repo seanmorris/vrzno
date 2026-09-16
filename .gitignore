@@ -29,6 +29,8 @@ mkinstalldirs
 modules
 run-tests.php
 vrzno_js.h
+/generated/
+/node_modules/
 tests/*/*.diff
 tests/*/*.out
 tests/*/*.php

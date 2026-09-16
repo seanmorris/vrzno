@@ -1,0 +1,28 @@
+/* Expanded by Make before Emscripten stringifies these function bodies. */
+EM_JS(char *, vrzno_js_eval, (const char * sourceAddress), {
+#include "vrzno_eval.js"
+});
+
+EM_JS(char *, vrzno_js_run, (const char * nameAddress, const char * jsonAddress), {
+#include "vrzno_run.js"
+});
+
+EM_JS(void, vrzno_js_timeout, (zend_long milliseconds, zval * callbackAddress), {
+#include "vrzno_timeout.js"
+});
+
+EM_ASYNC_JS(void, vrzno_await_internal, (vrzno_target_id targetId, zval * rv), {
+#include "vrzno_await_internal.js"
+});
+
+EM_JS(void, vrzno_js_env, (const char * nameAddress, zval * resultAddress), {
+#include "vrzno_env.js"
+});
+
+EM_JS(void, vrzno_js_shared, (const char * nameAddress, zval * resultAddress), {
+#include "vrzno_shared.js"
+});
+
+EM_JS(void, vrzno_js_import, (const char * nameAddress, zval * resultAddress), {
+#include "vrzno_import.js"
+});
