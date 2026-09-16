@@ -27,6 +27,31 @@ still matter because `Module.WeakerMap` is exposed and can be supplied by a call
 Capturing constructors also supports the controlled lifecycle tests, which restore
 the host globals after initializing a runtime.
 
+## Compatibility cost
+
+The native APIs have been available across major browsers since April 2021:
+Chrome 84, Firefox 79, Safari 14.1, and Node 14.6 support both
+([WeakRef data](https://github.com/mdn/browser-compat-data/blob/main/javascript/builtins/WeakRef.json),
+[FinalizationRegistry data](https://github.com/mdn/browser-compat-data/blob/main/javascript/builtins/FinalizationRegistry.json)).
+php-wasm's Emscripten 6.0.6 defaults already target Chrome 85, Firefox 79,
+Safari 15, and Node 18.3. Requiring these APIs adds no browser or Node version
+restriction to those standard builds.
+
+Cloudflare enables both APIs by default from compatibility date `2025-05-05`;
+older dates can opt in with `enable_weak_ref`
+([Cloudflare documentation](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#enable-finalizationregistry-and-weakref)).
+At evaluation, php-wasm's Pages configuration uses `2024-12-01` and its workerd
+tests use `2024-02-01`. A local workerd probe confirms both APIs are undefined
+with the Pages date, and available with the flag or the newer default date.
+
+Preserving those existing configurations requires the fallback adapter. An
+explicit native-API requirement is also practical if Cloudflare users are told
+to enable the flag; only older/custom builds and older compatibility settings
+would lose support. The fallback is a compatibility choice, not a broad obstacle
+to package adoption.
+
+## Unregister tokens
+
 Both implementations use the value as the finalizer unregister token. Registering
 one object under two keys and then deleting one key unregisters cleanup for both.
 The remaining dead entry is pruned on lookup or iteration. The package therefore
