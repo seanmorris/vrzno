@@ -5,7 +5,7 @@
 		"lint": "eslint js/ eslint.config.mjs tests/ --max-warnings=0",
 		"lint:fix": "npm run lint -- --fix",
 		"test": "node --test tests/*.test.mjs",
-		"test:integration": "node --expose-gc --test tests/integration.mjs tests/ownership.mjs tests/callback-identity.mjs tests/magic-method-identity.mjs tests/iterator-lifecycle.mjs tests/lifecycle-contract.mjs",
+		"test:integration": "node --expose-gc --test tests/integration.mjs tests/property-options.mjs tests/ownership.mjs tests/callback-identity.mjs tests/magic-method-identity.mjs tests/iterator-lifecycle.mjs tests/lifecycle-contract.mjs",
 		"test:weakermap": "node --test tests/weakermap.test.mjs"
 	},
 	"devDependencies": {

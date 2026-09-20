@@ -53,7 +53,8 @@ Module.methodToJs = (zo, method) => {
 /**
  * Returns a cached proxy for a PHP object, or its original JS target when already
  * bridged. A new proxy owns a copied zval and checks its request generation before
- * native access.
+ * native access. Missing properties become undefined; explicit PHP null and
+ * values returned by magic getters retain their PHP meaning.
  *
  * @param {WasmAddress} zo Borrowed zend_object address.
  * @param {WasmAddress} [zv=0] Source zval to copy, or zero to copy the object directly.

@@ -22,6 +22,12 @@ The PDO connectors that used to live here now ship as separate extensions:
 - runtime value injection through `vrzno_env()` and `vrzno_shared()`
 - `http` and `https` stream wrapper support backed by JavaScript `fetch()`
 
+When JavaScript reads a PHP object's absent property, the result is `undefined`.
+An explicitly stored PHP `null` remains JavaScript `null`; magic `__get` and
+`__isset` behavior is preserved. This lets a PHP object containing only
+`method => 'GET'` serve as native `Request` or `fetch` options without inventing
+values for omitted options such as `headers` or `cache`.
+
 ## Quick Start
 
 In `php-wasm`, Vrzno is typically available by default.

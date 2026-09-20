@@ -309,7 +309,8 @@ zval* EMSCRIPTEN_KEEPALIVE vrzno_expose_read_property(zend_object *zo, char *nam
 
 	zval *value = zend_read_property(zo->ce, zo, name, strlen(name), 1, owned);
 
-	if(!value || Z_TYPE_P(value) == IS_UNDEF)
+	/* Zend's missing-property sentinel is null-valued, but is not an explicit null. */
+	if(!value || value == &EG(uninitialized_zval) || Z_TYPE_P(value) == IS_UNDEF)
 	{
 		vrzno_expose_destroy_zval(owned);
 		return NULL;

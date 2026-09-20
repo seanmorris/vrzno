@@ -273,6 +273,8 @@ try
 			const unsupported = new PhpNode();
 			await assert.rejects(unsupported.binary,
 				/Vrzno requires WeakRef and FinalizationRegistry.*enable_weak_ref.*2025-05-05/);
+			// Emscripten also records this intentional startup failure on the process.
+			process.exitCode = 0;
 		});
 	}
 	else
