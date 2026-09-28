@@ -1,267 +1,343 @@
 # vrzno
-(/vərəˈzɑːnoʊ/ | vər-ə-ZAH-noh)
 
-`vrzno` is the JavaScript bridge extension for `php-wasm`.
-It lets PHP work with JavaScript values, objects, arrays, callbacks, classes, promises, and globals as if they were local PHP values.
+JavaScript bridge for PHP running under Emscripten.
 
-![](https://github.com/seanmorris/vrzno/blob/master/banner.jpg?raw=true)
+Vrzno (/vərəˈzɑːnoʊ/, vər-ə-ZAH-noh) lets PHP access JavaScript objects,
+functions, constructors, and promises through runtime handles. Vrzno 0.2 supports
+PHP 8.0 through 8.5 on Emscripten's wasm32 memory model.
 
-`vrzno` requires PHP 8.0+.
+The private `vrzno-bridge` npm package supplies this repository's build and test
+tools.
 
-The PDO connectors that used to live here now ship as separate extensions:
+![Vrzno banner](banner.jpg)
 
-- Cloudflare D1: <https://github.com/seanmorris/pdo-cfd1>
-- PGlite / PostgreSQL: <https://github.com/seanmorris/pdo-pglite>
+## Table of Contents
 
-## What It Gives You
+- [Install](#install)
+- [Usage](#usage)
+- [Building](#building)
+- [API](#api)
+	- [Objects and arrays](#objects-and-arrays)
+	- [Injected values, promises, and modules](#injected-values-promises-and-modules)
+	- [Callbacks and lifetime](#callbacks-and-lifetime)
+	- [Value conversion](#value-conversion)
+	- [HTTP streams](#http-streams)
+	- [Compatibility helpers](#compatibility-helpers)
+	- [Limits](#limits)
+- [Maintainers](#maintainers)
+- [Contributing](#contributing)
+- [License](#license)
 
-- access to `globalThis` from PHP through `new Vrzno`
-- JS object, array, and callback marshalling in both directions
-- promise interop through `vrzno_await()`
-- dynamic module loading through `vrzno_import()`
-- runtime value injection through `vrzno_env()` and `vrzno_shared()`
-- `http` and `https` stream wrapper support backed by JavaScript `fetch()`
+## Install
 
-When JavaScript reads a PHP object's absent property, the result is `undefined`.
-An explicitly stored PHP `null` remains JavaScript `null`; magic `__get` and
-`__isset` behavior is preserved. This lets a PHP object containing only
-`method => 'GET'` serve as native `Request` or `fetch` options without inventing
-values for omitted options such as `headers` or `cache`.
+Standard [php-wasm](https://github.com/seanmorris/php-wasm) builds include Vrzno.
+Use a build containing this Vrzno revision: build one using [Building](#building)
+or obtain matching artifacts from
+[php-wasm CI](https://github.com/seanmorris/php-wasm/actions/workflows/build.yaml).
+This README describes the current sources; older npm binaries can contain an
+older bridge.
 
-## Quick Start
+Install the complete built runtime package in your JavaScript application:
 
-In `php-wasm`, Vrzno is typically available by default.
-Pass any JavaScript values you want to expose into the runtime constructor, then read them from PHP.
+```sh
+npm install /absolute/path/to/php-wasm/packages/php-wasm
+```
+
+Replace the path with your generated package directory. Keep its JavaScript,
+Wasm, and support files together. Vrzno is compiled into PHP; installing extension
+sources alone does not add it to an existing Wasm binary.
+
+### Dependencies
+
+The JavaScript host must provide `WeakRef` and `FinalizationRegistry`.
+Initialization fails with an explanatory error when either is missing. Source
+builds require wasm32 and Asyncify; native PHP and wasm64 builds are unsupported.
+
+Cloudflare Workers need compatibility date `2025-05-05` or newer, or
+`compatibility_flags = ["enable_weak_ref"]`. See the
+[Cloudflare flag documentation](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#enable-finalizationregistry-and-weakref)
+and php-wasm's [Cloudflare build guide](https://github.com/seanmorris/php-wasm/blob/develop/CLOUDFLARE.md).
+
+## Usage
+
+Save this as `example.mjs` and run it with `node example.mjs`:
 
 ```js
 import { PhpNode } from 'php-wasm/PhpNode.mjs';
 
 const php = new PhpNode({
-  version: '8.4',
-  answer: 42,
+	version: '8.4'
+	, answer: 42
+	, shared: {greeting: 'Hello from JavaScript'}
 });
 
-await php.run(`<?php
-  $window = new Vrzno;
+php.addEventListener('output', event => console.log(event.detail.join('')));
+php.addEventListener('error', event => console.error(event.detail.join('')));
 
-  var_dump(vrzno_env('answer'));
-  var_dump($window->Date->now() > 0);
+const exitCode = await php.run(`<?php
+	$js = new Vrzno;
+	$greeting = vrzno_shared('greeting');
+	$promise = $js->Promise->resolve($greeting);
+
+	echo vrzno_env('answer'), ': ', vrzno_await($promise);
 `);
+
+if(exitCode !== 0)
+{
+	throw new Error('PHP execution failed');
+}
 ```
 
-## Core API
+The output is `42: Hello from JavaScript`. The `answer` option is read through
+`vrzno_env()`, while `shared.greeting` is read through `vrzno_shared()`.
 
-### `new Vrzno`
+For a browser application that resolves npm imports, use `PhpWeb` from
+`php-wasm/PhpWeb.mjs` with the same options and PHP code. The browser runtime is
+built with `web-mjs`; the Node runtime uses `node-mjs`.
 
-Creates a handle to JavaScript's `globalThis`.
-In a browser that usually means `window`.
+## Building
+
+From a php-wasm checkout with its dependencies and builder image available,
+build a Node runtime using local Vrzno sources:
+
+```sh
+npm ci
+make node-mjs PHP_VERSION=8.4 WITH_VRZNO=1 \
+  VRZNO_DEV_PATH=/absolute/path/to/vrzno
+```
+
+Use `make image` to build the builder image when needed, and `web-mjs` for the
+browser runtime. Outputs go into `packages/php-wasm/`. Omit `VRZNO_DEV_PATH` to
+use php-wasm's pinned upstream revision.
+
+| Setting | Effect |
+| --- | --- |
+| `WITH_VRZNO=1` | Enables the extension; the standard build default. |
+| `VRZNO_REPOSITORY` | Selects the upstream source repository. |
+| `VRZNO_REF` | Selects its revision; php-wasm defaults to an immutable commit pin. |
+| `VRZNO_DEV_PATH` | Uses a local checkout instead of upstream sources. |
+
+Direct PHP configuration uses `--enable-vrzno`. Building requires GNU Make 4.3
+or newer, Node.js, npm, and Emscripten with Asyncify enabled. Make installs the
+locked JavaScript build dependencies inside the build directory.
+
+## API
+
+The PHP examples below run inside `php.run()`. Function declarations are in
+[vrzno.stub.php](vrzno.stub.php).
+
+### Objects and arrays
+
+`new Vrzno` returns a handle to JavaScript's `globalThis`: `window` in a browser's
+main thread, or the host global in Node and workers. Read and write properties,
+call methods, invoke function handles, and construct JavaScript objects using
+PHP syntax. Casting a handle to a string uses JavaScript string conversion.
 
 ```php
 <?php
-$window = new Vrzno;
+$js = new Vrzno;
+$Date = $js->Date;
+$date = new $Date(0);
+echo $date->toISOString(), PHP_EOL;
+
+$numbers = $js->Array->of(3, 5);
+$numbers[] = 8;
+
+foreach($numbers as $number)
+{
+	echo $number, ' ';
+}
 ```
 
-### `vrzno_await($promiseLike)`
+This prints `1970-01-01T00:00:00.000Z`, then `3 5 8`. Numeric indexing and
+`foreach` work for JavaScript arrays, typed arrays, and ArrayBuffers viewed as
+bytes. Iteration by reference and arbitrary JavaScript iterators are unsupported.
+PHP arrays exposed to JavaScript support keyed reads, `length`, and iteration
+in PHP insertion order.
 
-Waits for a promise-like JavaScript value to settle and returns the resolved value to PHP.
+### Injected values, promises, and modules
 
-```php
-<?php
-$window = new Vrzno;
+| Function | Behavior |
+| --- | --- |
+| `vrzno_env(string $name): mixed` | Reads a value from the runtime constructor options. |
+| `vrzno_shared(string $name): mixed` | Reads a value from the runtime's shared map. |
+| `vrzno_await(Vrzno $promise_like): mixed` | Suspends PHP through Asyncify until the JavaScript await completes. |
+| `vrzno_import(string $module_url): Vrzno` | Starts a JavaScript module import and returns a handle to its promise. |
 
-$response = vrzno_await(
-    $window->fetch('https://api.weather.gov/gridpoints/TOP/40,74/forecast')
-);
+The shared map also carries values interpolated by php-wasm's `php.r` and
+`php.x` template helpers. `php.r` runs a PHP script; `php.x` evaluates a PHP
+expression and returns its bridged value.
 
-$json = vrzno_await($response->json());
-
-var_dump($json);
-```
-
-### `vrzno_import($moduleUrl)`
-
-Performs a dynamic JavaScript `import()` and returns the resulting promise/object bridge.
-
-```php
-<?php
-$plot = vrzno_await(
-    vrzno_import('https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm')
-);
-```
-
-### `vrzno_env($name)`
-
-Returns a value that was attached directly to the runtime constructor arguments.
+For a local module example, save this as `values.mjs` beside your application:
 
 ```js
-import { PhpNode } from 'php-wasm/PhpNode.mjs';
-import gi from 'node-gtk';
-
-const Gtk = gi.require('Gtk', '3.0');
-const WebKit2 = gi.require('WebKit2');
-
-const php = new PhpNode({ gi, Gtk, WebKit2 });
+export const answer = 42;
 ```
+
+Add `moduleUrl: new URL('./values.mjs', import.meta.url).href` to the runtime
+constructor options, then run:
 
 ```php
 <?php
-$gi = vrzno_env('gi');
-$Gtk = vrzno_env('Gtk');
-$WebKit2 = vrzno_env('WebKit2');
+$module = vrzno_await(vrzno_import(vrzno_env('moduleUrl')));
+echo $module->answer;
 ```
 
-### `vrzno_shared($name)`
+This prints `42`. Use a URL supported by the JavaScript host. Relative import
+paths resolve from the generated JavaScript runtime, so passing an absolute URL
+avoids dependence on its location. Node's normal loader accepts local file URLs;
+browsers can load HTTP modules subject to CORS. Cloudflare requires modules to
+be packaged with the Worker.
 
-Reads a value from the runtime's shared-value map.
-This is the mechanism used by helpers such as `php.x` and `php.r` in `php-wasm` to move arbitrary JavaScript values into PHP without JSON-encoding them first.
+### Callbacks and lifetime
 
-### `vrzno_target($value)`
-
-Returns the internal numeric target handle for a bridged JavaScript object.
-This is mostly useful for debugging and internals work.
-
-### Legacy Compatibility Helpers
-
-These functions remain supported without deprecation warnings, but the object bridge is the preferred API:
-
-- `vrzno_eval($code)`
-- `vrzno_run($globalFunctionName, $args = [])`
-- `vrzno_timeout($milliseconds, $callback)`
-
-## Working With JavaScript Objects And Classes
-
-JavaScript classes and objects are marshalled directly through Vrzno.
-Static calls, constructors, property reads, and method calls all use normal PHP syntax.
+PHP closures, invokable objects, and callable arrays can cross into JavaScript.
+This PHP 8.0-compatible example creates a JavaScript promise, resolves it from a
+PHP callback, and waits before printing `Done from PHP`:
 
 ```php
 <?php
-$window = new Vrzno;
-$Date = $window->Date;
-
-var_dump($Date->now());
-
-$date = new $Date;
-var_dump($date->toISOString());
-```
-
-## Callbacks In Both Directions
-
-You can pass a PHP callable to JavaScript and let JavaScript call it later:
-
-```php
-<?php
-$window = new Vrzno;
-
-$window->setTimeout(
-    fn() => $window->console->log('Done from PHP'),
-    1000
-);
-```
-
-You can also construct JavaScript promises from PHP:
-
-```php
-<?php
-$window = new Vrzno;
-$Promise = $window->Promise;
-
-$promise = new $Promise(function($accept, $reject) use ($window) {
-    $window->setTimeout(fn() => $accept('Pass.'), 1000);
+$js = new Vrzno;
+$Promise = $js->Promise;
+$promise = new $Promise(function($resolve) use ($js)
+{
+	$js->setTimeout(fn() => $resolve('Done from PHP'), 10);
 });
 
-$promise->then(var_dump(...))->catch(var_dump(...));
+echo vrzno_await($promise);
 ```
 
-## Arrays And Iteration
+Re-exporting the same callable reuses its JavaScript function while that wrapper
+is alive. Methods retain their PHP receiver, so listener removal can match a
+previously added callback. Wrappers keep their PHP values alive, including arrays
+used by detached iterator factories and iterators.
 
-JavaScript arrays are exposed as array-like / iterable values on the PHP side.
-Indexed access and property-style access are both bridged.
+Runtime refresh and PHP request shutdown release owned PHP values and invalidate
+old wrappers. Using a stale JavaScript proxy or callback throws `ReferenceError`.
+Remove event listeners and finish pending work before refreshing their runtime.
+Cleanup at shutdown does not depend on garbage collection running first.
 
-## Value Semantics
+### Value conversion
 
-- JavaScript `null` and `undefined` both become PHP `null`; PHP has no separate undefined value.
-- PHP `null` becomes JavaScript `null`. A missing PHP array key or object property reads as JavaScript `undefined`.
-- `property_exists()` can distinguish an existing JavaScript property containing `null` or `undefined` from a missing property. `isset()` remains false for all three cases.
-- JavaScript 32-bit integers become PHP integers. Other numbers—including `NaN`, infinities, and larger integers—become PHP floats.
-- JavaScript BigInt and Symbol values cannot be represented in PHP and raise `TypeError`.
-- Embedded null bytes are preserved in strings crossing either direction.
+| Value crossing the bridge | Result |
+| --- | --- |
+| JavaScript `null` or `undefined` | PHP `null`. |
+| PHP `null` | JavaScript `null`. |
+| Missing PHP array key or object property | JavaScript `undefined`. |
+| JavaScript signed 32-bit integer | PHP integer. |
+| Other JavaScript numbers, including larger integers, `NaN`, and infinities | PHP float. |
+| JavaScript BigInt or Symbol | PHP `TypeError`. |
+| JavaScript object or function | Vrzno handle. |
+| PHP object, array, or callable | JavaScript proxy or callback retaining its PHP owner. |
 
-JavaScript exceptions and rejected promises become catchable PHP `RuntimeException` instances. A bridged JavaScript proxy that outlives a PHP runtime refresh throws `ReferenceError` when used.
+Strings cross as UTF-8, with embedded NUL bytes preserved. `property_exists()`
+can distinguish an existing JavaScript property containing `null` or `undefined`
+from a missing property; `isset()` is false for all three.
 
-`Vrzno` objects are runtime handles. They cannot be cloned or serialized.
+PHP magic `__get` and `__isset` behavior is preserved. An object containing only
+`method => 'GET'` can therefore supply JavaScript `Request` or `fetch` options:
+omitted `headers` and `cache` remain `undefined`, while explicit null stays null.
+JavaScript exceptions and promise rejections become catchable PHP
+`RuntimeException` instances.
 
-## HTTP And `allow_url_fopen`
+### HTTP streams
 
-Vrzno implements `http` and `https` stream wrappers using JavaScript `fetch()`.
-That means normal PHP stream functions can work in wasm-hosted runtimes when `allow_url_fopen` is enabled.
-
-```php
-<?php
-var_dump(file_get_contents('https://jsonplaceholder.typicode.com/users'));
-```
-
-Basic stream context options are supported:
-
-- `method`
-- `content`
-- `header`
-- `ignore_errors`
+Vrzno provides `http` and `https` stream wrappers through the host's `fetch()`.
+Enable `allow_url_fopen` for PHP stream functions such as `file_get_contents()`.
+Pass your HTTP endpoint as the runtime's `endpoint` option before running:
 
 ```php
 <?php
 $context = stream_context_create([
-    'http' => [
-        'method'  => 'POST',
-        'content' => json_encode(['value' => 'foobar']),
-    ],
+	'http' => [
+		'method' => 'POST',
+		'header' => ['Content-Type: application/json'],
+		'content' => json_encode(['value' => 'hello']),
+		'ignore_errors' => true
+	]
 ]);
 
-var_dump(
-    file_get_contents(
-        'https://jsonplaceholder.typicode.com/users',
-        false,
-        $context
-    )
-);
+$body = file_get_contents(vrzno_env('endpoint'), false, $context);
+
+if($body === false)
+{
+	throw new RuntimeException('HTTP request failed');
+}
+
+echo $body;
 ```
 
-More background on HTTP stream options: <https://www.php.net/manual/en/context.http.php>
+Supported context options are `method`, `content`, `header`, and `ignore_errors`.
+Headers accept an array of lines or a newline-separated string. Request content
+and response bodies preserve binary bytes. Response headers populate
+`$http_response_header` and stream metadata.
 
-## Limitations
+The complete response is buffered before the stream opens. Streams are readable
+and non-seekable. HTTP status 400 or higher normally fails with a PHP stream
+warning; `ignore_errors` allows the body to be read. Network failures still fail.
+Other PHP HTTP context options, including `timeout`, are not implemented here.
+Browser CORS and header restrictions follow the host's
+[Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch).
 
-- JavaScript uses one namespace for properties and methods. PHP separates them. If a PHP object exposes both `$x->y` and `$x->y()`, JavaScript can only see one of them. Today, method names win.
-- PHP classes are not exposed back to JavaScript as constructible classes.
-- Static methods are not currently proxied back from PHP into JavaScript.
-- The legacy helper functions are string-based conveniences, not the preferred long-term API.
+### Compatibility helpers
 
-## Platform Support
+These helpers remain supported without deprecation warnings. Use the object
+bridge when passing typed values:
 
-Vrzno 0.2 supports PHP 8.0 through 8.5 compiled for Emscripten's wasm32 memory model. It is not a native desktop/server PHP extension and intentionally fails compilation on non-wasm32 targets.
+| Function | Behavior |
+| --- | --- |
+| `vrzno_eval(string $code): string` | Evaluates JavaScript source and stringifies the result. |
+| `vrzno_run(string $global_function_name, array $args = []): string` | Calls a named global function with JSON-encoded arguments and stringifies the result. |
+| `vrzno_timeout(int $milliseconds, callable $callback): void` | Schedules a PHP callback after a nonnegative delay. |
 
-The JavaScript runtime must provide `WeakRef` and `FinalizationRegistry`.
-Initialization rejects unsupported environments with an actionable error. Cloudflare
-Workers must use compatibility date `2025-05-05` or later, or explicitly enable
-the `enable_weak_ref` compatibility flag. Strong-reference and no-op finalizer
-fallbacks are no longer supported; explicit PHP ownership cleanup still runs
-at shutdown independently of garbage collection.
+For debugging, `vrzno_target(Vrzno $value): int` returns an internal target handle.
+These handles are distinct from Wasm memory addresses and are valid only in their
+owning runtime. The internal `vrzno_zval(mixed $value): int` ownership helper
+supports `php.x`; it returns an owned Wasm address.
 
-## Building And Testing
+Host restrictions still apply to evaluation and module loading. The
+[Cloudflare build](https://github.com/seanmorris/php-wasm/blob/develop/CLOUDFLARE.md#worker-usage)
+disables JavaScript string evaluation.
 
-The bridge's JavaScript lives in `js/`. The five `*_js.h.in`
-templates declare the native signatures and include those bodies. The initialization
-template combines the cache, ownership, proxy, callback, and conversion helpers in
-one scope. JSDoc describes target handles, Wasm pointers, ownership, and async results.
+### Limits
 
-PHP's Make build runs Emscripten's directives-only C preprocessor to expand the
-includes before `EM_JS`/`EM_ASYNC_JS` stringify the bodies. Generated headers and
-dependency files live under the extension's build directory in `generated/`.
-The resulting native objects contain the JS; linking them needs no source files,
-`--js-library` option, or runtime npm import. Building requires GNU Make 4.3 or newer
-for grouped targets, Node, and npm. Make installs the locked build dependencies in
-`generated/npm` and bundles `weakermap` plus `js/vrzno_weakermap.mjs` with esbuild.
-The source checkout is unchanged, including when using a separate build directory.
+Vrzno handles cannot be cloned or serialized. If a PHP object has a property and
+a method with the same name, JavaScript sees the method. PHP classes are not
+exposed as JavaScript constructors. Public static methods can be called through
+an exported PHP object.
 
-Run the fast checks with Emscripten 6.0.6 available as `emcc`:
+Database drivers are separate extensions:
+[PDO-CFD1](https://github.com/seanmorris/pdo-cfd1) for Cloudflare D1 and
+[PDO-PGlite](https://github.com/seanmorris/pdo-pglite) for embedded PostgreSQL.
+
+## Maintainers
+
+[Sean Morris](https://github.com/seanmorris).
+
+## Contributing
+
+Use [GitHub issues](https://github.com/seanmorris/vrzno/issues) for questions and
+bug reports, and [pull requests](https://github.com/seanmorris/vrzno/pulls) for
+changes. Follow `sm-no-saccade-style` in JavaScript, including README examples.
+
+### Edit the bridge
+
+JavaScript bodies and JSDoc live in [js/](js/). Five `*_js.h.in` templates declare
+the C signatures and include those bodies.
+[Makefile.frag](Makefile.frag) runs Emscripten's directives-only preprocessor
+before `EM_JS` and `EM_ASYNC_JS` stringify the JavaScript. The resulting native
+objects contain the code needed at link time.
+
+Make installs locked dependencies under `generated/npm`, bundles `weakermap`
+and its adapter with esbuild, and expands that bundle into the initialization
+header. Generated headers and dependency files also stay under the build
+directory's `generated/`, including builds outside the source checkout. The
+runtime needs no separate npm import. See the
+[weakermap integration contract](docs/weakermap.md) for cache and ownership rules.
+
+### Run tests
+
+With Node.js, GNU Make 4.3 or newer, and Emscripten 6.0.6 on `PATH`, run:
 
 ```sh
 npm ci
@@ -269,35 +345,38 @@ npm run lint
 npm test
 ```
 
-The style check uses the pinned npm `sm-no-saccade-style` recommended configuration
-for the bridge, build scripts, lint configuration, and tests. CI requires it to pass
-without warnings before native builds start.
-The Make tests cover separate build directories, every JS input's dependencies,
-parallel builds, missing inputs, recovery, clean targets, and object-only linking.
-`npm run test:weakermap` checks the [weakermap integration contract](docs/weakermap.md).
+Lint covers the bridge, build scripts, ESLint configuration, and tests.
+`npm run lint:fix` applies formatting. `npm run test:weakermap` runs the package
+and adapter checks separately. Make tests cover dependencies, parallel and
+separate builds, missing inputs, recovery, cleaning, and linking all 44 bridge
+functions after removing their JavaScript sources.
 
-Use a neighboring `php-wasm` checkout as the build harness:
+After building the Node runtime with this Vrzno checkout, run this repository's
+PHP integration suite:
 
 ```sh
-cd ../php-wasm
-npm ci
-make image
-make -j2 node-mjs PHP_VERSION=8.4 VRZNO_DEV_PATH="$PWD/../vrzno"
-PHP_VERSION=8.4 node --test packages/vrzno/test/*.mjs
+PHP_VERSION=8.4 PHP_WASM_ROOT=/absolute/path/to/php-wasm npm run test:integration
 ```
 
-Run this repository's regression suite against the freshly built runtime:
+Then, from the php-wasm checkout, run its Vrzno package tests:
 
-```bash
-cd ../vrzno
-PHP_VERSION=8.4 PHP_WASM_ROOT=../php-wasm npm run test:integration
+```sh
+PHP_VERSION=8.4 node --expose-gc --test packages/vrzno/test/*.mjs
 ```
 
-CI first runs the style and fast bridge checks on Node 22.23.2 and 24.5.0. The native matrix then compiles and runs the integration tests on the oldest and newest supported PHP releases using Node 22.23.2. They cover callback identity (including magic methods) and listener removal, detached iterator lifetimes, runtime refresh, and owned expression-result cleanup. Both controlled lifecycle tests and native garbage-collection tests are required. Negative controls verify that a strong callback cache or disabled finalization fails the expected assertion. Native GC tests fail on timeout or missing GC support; they never turn a possible leak into a skipped test.
+[CI](.github/workflows/ci.yml) runs the fast checks on Node 22.23.2 and 24.5.0,
+then builds PHP 8.0 and 8.5 and runs both integration suites on Node 22.23.2.
+The suites cover conversion, callback identity, listener removal, detached
+iterators, refresh, and ownership cleanup. Controlled finalization and native GC
+are both required. Negative controls check that a strong callback cache or
+disabled finalization fails the expected assertion; missing GC support and
+timeouts fail the tests.
 
-Before sending a change, regenerate `vrzno_arginfo.h` if `vrzno.stub.php` changed, run both test suites, and confirm `git diff --check` is clean.
+Regenerate `vrzno_arginfo.h` when [vrzno.stub.php](vrzno.stub.php) changes. Run both
+fast and integration checks, and confirm `git diff --check` is clean before
+submitting a change.
 
 ## License
 
-Vrzno is licensed under the Apache License 2.0. See [LICENSE](LICENSE) and
-[NOTICE](NOTICE) for the bundled weakermap attribution.
+[Apache License 2.0](LICENSE). [CREDITS](CREDITS) names Sean Morris as the author.
+See [NOTICE](NOTICE) for the bundled weakermap attribution.
