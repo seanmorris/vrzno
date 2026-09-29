@@ -1,5 +1,6 @@
 {
 	"name": "vrzno-bridge",
+	"license": "(Apache-2.0 OR GPL-2.0-only)",
 	"private": true,
 	"scripts": {
 		"lint": "eslint js/ eslint.config.mjs tests/ --max-warnings=0",

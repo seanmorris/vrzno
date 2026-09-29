@@ -381,5 +381,6 @@ submitting a change.
 
 ## License
 
-[Apache License 2.0](LICENSE). [CREDITS](CREDITS) names Sean Morris as the author.
-See [NOTICE](NOTICE) for the bundled weakermap attribution.
+Dual licensed under the [Apache License, Version 2.0](LICENSE) and the
+[GNU General Public License, Version 2](LICENSE-GPL); you may use it under the
+terms of either license. [CREDITS](CREDITS) names Sean Morris as the author. See [NOTICE](NOTICE) for copyright and the bundled weakermap attribution.
