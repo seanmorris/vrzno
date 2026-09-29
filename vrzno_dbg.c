@@ -81,7 +81,7 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 				memcpy(cur, &p, sizeof p);
 				cur += sizeof p;
 
-				strcpy(cur, ZSTR_VAL(varName));
+				memcpy(cur, ZSTR_VAL(varName), ZSTR_LEN(varName) + 1);
 				cur += ZSTR_LEN(varName) + 1;
 			}
 		} ZEND_HASH_FOREACH_END();
