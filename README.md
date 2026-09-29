@@ -31,21 +31,24 @@ tools.
 ## Install
 
 Standard [php-wasm](https://github.com/seanmorris/php-wasm) builds include Vrzno.
-Use a build containing this Vrzno revision: build one using [Building](#building)
-or obtain matching artifacts from
-[php-wasm CI](https://github.com/seanmorris/php-wasm/actions/workflows/build.yaml).
-This README describes the current sources; older npm binaries can contain an
-older bridge.
+php-wasm 0.2.0 and newer ship the Vrzno 0.2 bridge described here:
 
-Install the complete built runtime package in your JavaScript application:
+```sh
+npm install php-wasm@^0.2.0
+```
+
+This README describes the current sources. To use a revision newer than the
+published runtime, build php-wasm as described in [Building](#building) or obtain
+matching artifacts from
+[php-wasm CI](https://github.com/seanmorris/php-wasm/actions/workflows/build.yaml),
+then install the generated package directory:
 
 ```sh
 npm install /absolute/path/to/php-wasm/packages/php-wasm
 ```
 
-Replace the path with your generated package directory. Keep its JavaScript,
-Wasm, and support files together. Vrzno is compiled into PHP; installing extension
-sources alone does not add it to an existing Wasm binary.
+Keep its JavaScript, Wasm, and support files together. Vrzno is compiled into
+PHP; installing extension sources alone does not add it to an existing Wasm binary.
 
 ### Dependencies
 
