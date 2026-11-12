@@ -57,6 +57,22 @@ static char *vrzno_dbg_put_string(char *cur, const char *value, size_t len)
 }
 
 /*
+ * Steps to the calling frame that runs PHP code. Internal functions have call
+ * frames too, and PHP never sets their opline, so testing it for NULL (as
+ * phpdbg does) skips them only when the stack memory happens to be clear.
+ * vrzno_dbg_switch_frame() and vrzno_dbg_dump_frames() both count with this.
+ */
+static zend_execute_data *vrzno_dbg_caller(zend_execute_data *execute_data)
+{
+	do
+	{
+		execute_data = execute_data->prev_execute_data;
+	} while(execute_data && !(execute_data->func && ZEND_USER_CODE(execute_data->func->type)));
+
+	return execute_data;
+}
+
+/*
  * Dumps a symbol table as [byte length][zval pointer][name length][name\0]...
  * scope: 0 for the current frame's variables, 1 for superglobals, 2 for
  * every global variable, user-defined ones included.
@@ -529,10 +545,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_dbg_switch_frame(int frame)
 				break;
 			}
 
-			do
-			{
-				execute_data = execute_data->prev_execute_data;
-			} while(execute_data && execute_data->opline == NULL);
+			execute_data = vrzno_dbg_caller(execute_data);
 		}
 	}
 	zend_catch
@@ -557,17 +570,6 @@ int EMSCRIPTEN_KEEPALIVE vrzno_dbg_switch_frame(int frame)
 	}
 
 	return oldFrame;
-}
-
-/* Steps to the caller the way vrzno_dbg_switch_frame() counts frames. */
-static zend_execute_data *vrzno_dbg_caller(zend_execute_data *execute_data)
-{
-	do
-	{
-		execute_data = execute_data->prev_execute_data;
-	} while(execute_data && execute_data->opline == NULL);
-
-	return execute_data;
 }
 
 typedef struct {
@@ -637,7 +639,8 @@ static void vrzno_dbg_read_frame(zend_execute_data *execute_data, vrzno_dbg_fram
  * function is empty for top-level code and the class is empty outside a class.
  *
  * Frames are counted exactly as vrzno_dbg_switch_frame() counts them, so a
- * frame's position in this dump is the index to switch to.
+ * frame's position in this dump is the index to switch to. Internal function
+ * frames are not listed.
  */
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_frames(void)
 {
