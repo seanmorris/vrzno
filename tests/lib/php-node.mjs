@@ -13,7 +13,9 @@ export class PhpNode extends BasePhpNode
 {
 	constructor(args = {})
 	{
-		super(nodeRuntimeOptions(args));
+		// Naming the runtime lets php-wasm's helper add Vrzno's side module when the
+		// runtime under test was built without Vrzno linked in.
+		super(nodeRuntimeOptions({runtime: 'php', ...args}));
 	}
 }
 

@@ -48,6 +48,18 @@
 	ZEND_PARSE_PARAMETERS_END()
 #endif
 
+/* Encode with PHP's exported entry point. php_json_encode_zval() is internal to
+ * PHP, so a Vrzno built as a side module cannot bind it. The exported function
+ * also records its outcome for json_last_error(), which belongs to the script,
+ * so that is put back. */
+static inline void vrzno_json_encode(smart_str *buf, zval *value, int options)
+{
+	php_json_error_code error = JSON_G(error_code);
+
+	php_json_encode_ex(buf, value, options, PHP_JSON_PARSER_DEFAULT_DEPTH);
+	JSON_G(error_code) = error;
+}
+
 extern zend_class_entry *vrzno_class_entry;
 extern zend_object_handlers vrzno_object_handlers;
 extern const php_stream_wrapper php_stream_fetch_wrapper;

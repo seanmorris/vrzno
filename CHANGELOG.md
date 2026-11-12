@@ -12,6 +12,7 @@ All notable changes to Vrzno are documented in this file.
 - Add `vrzno_dbg_zval_child()` to find an array element or object property by key, so the helpers below also work for values reached through a parent.
 - Add `vrzno_dbg_zval_type()`, `vrzno_dbg_zval_class()`, `vrzno_dbg_zval_count()`, and `vrzno_dbg_zval_is_reference()` so a debugger can show a value's PHP type, tell arrays from objects, and recognise a variable that has not been assigned yet.
 - Add `vrzno_dbg_zval_class_length()`. An anonymous class is named `class@anonymous`, a NUL byte, then the file and line that declare it, so a host that reads `vrzno_dbg_zval_class()` as a C string sees the same name for every anonymous class.
+- Encode JSON through PHP's exported `php_json_encode_ex()` instead of the internal `php_json_encode_zval()`, and put the script's `json_last_error()` state back afterwards. A Vrzno built as a side module cannot bind the internal function: listing a PHP object's keys from JavaScript failed there with `resolved is not a function`, and array keys and `vrzno_run()` arguments go through the same call.
 
 ## 0.2.0 - 2026-09-04
 
