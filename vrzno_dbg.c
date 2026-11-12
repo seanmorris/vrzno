@@ -57,19 +57,28 @@ static char *vrzno_dbg_put_string(char *cur, const char *value, size_t len)
 }
 
 /*
- * Steps to the calling frame that runs PHP code. Internal functions have call
- * frames too, and PHP never sets their opline, so testing it for NULL (as
- * phpdbg does) skips them only when the stack memory happens to be clear.
+ * The nearest frame that runs PHP code, starting with execute_data itself.
+ * Internal functions have call frames too, and PHP never sets their opline, so
+ * testing it for NULL (as phpdbg does) skips them only when the stack memory
+ * happens to be clear.
+ */
+static zend_execute_data *vrzno_dbg_user_frame(zend_execute_data *execute_data)
+{
+	while(execute_data && !(execute_data->func && ZEND_USER_CODE(execute_data->func->type)))
+	{
+		execute_data = execute_data->prev_execute_data;
+	}
+
+	return execute_data;
+}
+
+/*
+ * Steps to the calling frame that runs PHP code.
  * vrzno_dbg_switch_frame() and vrzno_dbg_dump_frames() both count with this.
  */
 static zend_execute_data *vrzno_dbg_caller(zend_execute_data *execute_data)
 {
-	do
-	{
-		execute_data = execute_data->prev_execute_data;
-	} while(execute_data && !(execute_data->func && ZEND_USER_CODE(execute_data->func->type)));
-
-	return execute_data;
+	return vrzno_dbg_user_frame(execute_data->prev_execute_data);
 }
 
 /*
@@ -530,9 +539,14 @@ int EMSCRIPTEN_KEEPALIVE vrzno_dbg_switch_frame(int frame)
 
 	int oldFrame = PHPDBG_FRAME(num);
 
-	zend_execute_data *execute_data = PHPDBG_FRAME(num)
+	/*
+	 * Frame 0 is the innermost frame that runs PHP code. A host can ask while
+	 * PHP is inside an internal function (one that awaits a promise, say);
+	 * the line and the variables it sees then belong to that function's caller.
+	 */
+	zend_execute_data *execute_data = vrzno_dbg_user_frame(PHPDBG_FRAME(num)
 		? PHPDBG_FRAME(execute_data)
-		: EG(current_execute_data);
+		: EG(current_execute_data));
 
 	int i = 0;
 
@@ -640,7 +654,7 @@ static void vrzno_dbg_read_frame(zend_execute_data *execute_data, vrzno_dbg_fram
  *
  * Frames are counted exactly as vrzno_dbg_switch_frame() counts them, so a
  * frame's position in this dump is the index to switch to. Internal function
- * frames are not listed.
+ * frames are not listed, the innermost one included.
  */
 char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_frames(void)
 {
@@ -657,6 +671,9 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_frames(void)
 		top = PHPDBG_FRAME(execute_data);
 		selected = PHPDBG_FRAME(num);
 	}
+
+	/* The same starting frame as vrzno_dbg_switch_frame(). */
+	top = vrzno_dbg_user_frame(top);
 
 	for(execute_data = top; execute_data; execute_data = vrzno_dbg_caller(execute_data))
 	{
@@ -723,12 +740,25 @@ int EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_is_reference(zval *zv)
 	return Z_ISREF_P(zv) ? 1 : 0;
 }
 
-/* The class name of an object, or NULL for anything else. */
+/*
+ * The class name of an object, or NULL for anything else. Read it with
+ * vrzno_dbg_zval_class_length(): an anonymous class is named
+ * "class@anonymous", a NUL byte, then the file and line that declare it, so
+ * reading up to the first NUL gives every anonymous class the same name.
+ */
 const char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_class(zval *zv)
 {
 	zv = vrzno_dbg_resolve(zv);
 
 	return Z_TYPE_P(zv) == IS_OBJECT ? ZSTR_VAL(Z_OBJCE_P(zv)->name) : NULL;
+}
+
+/* Bytes in the class name of an object; 0 for anything else. */
+size_t EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_class_length(zval *zv)
+{
+	zv = vrzno_dbg_resolve(zv);
+
+	return Z_TYPE_P(zv) == IS_OBJECT ? ZSTR_LEN(Z_OBJCE_P(zv)->name) : 0;
 }
 
 /* Elements in an array or bytes in a string; -1 for anything else. */
