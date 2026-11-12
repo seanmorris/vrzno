@@ -8,7 +8,85 @@ __attribute__((weak)) int phpdbg_arm_auto_global(zval *ptrzv);
 __attribute__((weak)) void phpdbg_restore_frame(void);
 __attribute__((weak)) ZEND_EXTERN_MODULE_GLOBALS(phpdbg);
 
-char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
+/* Symbol scopes for vrzno_dbg_dump_symbols(). 0 and 1 match the former bool argument. */
+#define VRZNO_DBG_SCOPE_LOCALS       0
+#define VRZNO_DBG_SCOPE_SUPERGLOBALS 1
+#define VRZNO_DBG_SCOPE_GLOBALS      2
+
+/*
+ * Version of the debugger exports in this file, so JavaScript callers can pick
+ * a code path without probing for each symbol.
+ *
+ * 1: this function is absent. vrzno_dbg_dump_symbols() takes a bool, and
+ *    vrzno_dbg_dump_backtrace() is the only frame listing.
+ * 2: adds vrzno_dbg_dump_frames(), scope 2 for vrzno_dbg_dump_symbols(), and
+ *    the vrzno_dbg_zval_*() helpers.
+ */
+int EMSCRIPTEN_KEEPALIVE vrzno_dbg_api_version(void)
+{
+	return 2;
+}
+
+/* The sizing pass and the writing pass of a symbol dump must agree on this. */
+static bool vrzno_dbg_symbol_in_scope(zend_string *name, int scope)
+{
+	if(scope == VRZNO_DBG_SCOPE_GLOBALS)
+	{
+		return true;
+	}
+
+	return scope == VRZNO_DBG_SCOPE_SUPERGLOBALS
+		? zend_is_auto_global(name)
+		: !zend_is_auto_global(name);
+}
+
+static char *vrzno_dbg_put_word(char *cur, size_t value)
+{
+	memcpy(cur, &value, sizeof value);
+
+	return cur + sizeof value;
+}
+
+static char *vrzno_dbg_put_string(char *cur, const char *value, size_t len)
+{
+	cur = vrzno_dbg_put_word(cur, len);
+	memcpy(cur, value, len);
+	cur[len] = 0;
+
+	return cur + len + 1;
+}
+
+/*
+ * The nearest frame that runs PHP code, starting with execute_data itself.
+ * Internal functions have call frames too, and PHP never sets their opline, so
+ * testing it for NULL (as phpdbg does) skips them only when the stack memory
+ * happens to be clear.
+ */
+static zend_execute_data *vrzno_dbg_user_frame(zend_execute_data *execute_data)
+{
+	while(execute_data && !(execute_data->func && ZEND_USER_CODE(execute_data->func->type)))
+	{
+		execute_data = execute_data->prev_execute_data;
+	}
+
+	return execute_data;
+}
+
+/*
+ * Steps to the calling frame that runs PHP code.
+ * vrzno_dbg_switch_frame() and vrzno_dbg_dump_frames() both count with this.
+ */
+static zend_execute_data *vrzno_dbg_caller(zend_execute_data *execute_data)
+{
+	return vrzno_dbg_user_frame(execute_data->prev_execute_data);
+}
+
+/*
+ * Dumps a symbol table as [byte length][zval pointer][name length][name\0]...
+ * scope: 0 for the current frame's variables, 1 for superglobals, 2 for
+ * every global variable, user-defined ones included.
+ */
+char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(int scope)
 {
 	if(!EG(current_execute_data) || !EG(current_execute_data)->func)
 	{
@@ -18,7 +96,7 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 
 	zend_array *symtable;
 
-	if(show_globals)
+	if(scope != VRZNO_DBG_SCOPE_LOCALS)
 	{
 		if(phpdbg_arm_auto_global)
 		{
@@ -47,7 +125,7 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 		{
 			if(!varName) continue;
 
-			if(show_globals ? zend_is_auto_global(varName) : !zend_is_auto_global(varName))
+			if(vrzno_dbg_symbol_in_scope(varName, scope))
 			{
 				len += sizeof(void*)    // zval pointer
 					+ sizeof(size_t)    // name length
@@ -71,7 +149,7 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_symbols(bool show_globals)
 		{
 			if(!varName) continue;
 
-			if(show_globals ? zend_is_auto_global(varName) : !zend_is_auto_global(varName))
+			if(vrzno_dbg_symbol_in_scope(varName, scope))
 			{
 				p = zv;
 				memcpy(cur, &p, sizeof p);
@@ -461,9 +539,14 @@ int EMSCRIPTEN_KEEPALIVE vrzno_dbg_switch_frame(int frame)
 
 	int oldFrame = PHPDBG_FRAME(num);
 
-	zend_execute_data *execute_data = PHPDBG_FRAME(num)
+	/*
+	 * Frame 0 is the innermost frame that runs PHP code. A host can ask while
+	 * PHP is inside an internal function (one that awaits a promise, say);
+	 * the line and the variables it sees then belong to that function's caller.
+	 */
+	zend_execute_data *execute_data = vrzno_dbg_user_frame(PHPDBG_FRAME(num)
 		? PHPDBG_FRAME(execute_data)
-		: EG(current_execute_data);
+		: EG(current_execute_data));
 
 	int i = 0;
 
@@ -476,10 +559,7 @@ int EMSCRIPTEN_KEEPALIVE vrzno_dbg_switch_frame(int frame)
 				break;
 			}
 
-			do
-			{
-				execute_data = execute_data->prev_execute_data;
-			} while(execute_data && execute_data->opline == NULL);
+			execute_data = vrzno_dbg_caller(execute_data);
 		}
 	}
 	zend_catch
@@ -504,4 +584,223 @@ int EMSCRIPTEN_KEEPALIVE vrzno_dbg_switch_frame(int frame)
 	}
 
 	return oldFrame;
+}
+
+typedef struct {
+	const char *file;
+	size_t file_len;
+	const char *function;
+	size_t function_len;
+	const char *class_name;
+	size_t class_len;
+	uint32_t line;
+} vrzno_dbg_frame;
+
+static void vrzno_dbg_read_frame(zend_execute_data *execute_data, vrzno_dbg_frame *frame)
+{
+	zend_function *func = execute_data->func;
+
+	memset(frame, 0, sizeof *frame);
+	frame->file = frame->function = frame->class_name = "";
+
+	if(!func)
+	{
+		return;
+	}
+
+	if(func->common.function_name)
+	{
+		frame->function = ZSTR_VAL(func->common.function_name);
+		frame->function_len = ZSTR_LEN(func->common.function_name);
+	}
+
+	if(func->common.scope)
+	{
+		frame->class_name = ZSTR_VAL(func->common.scope->name);
+		frame->class_len = ZSTR_LEN(func->common.scope->name);
+	}
+
+	if(!ZEND_USER_CODE(func->type) || !execute_data->opline)
+	{
+		return;
+	}
+
+	if(func->op_array.filename)
+	{
+		frame->file = ZSTR_VAL(func->op_array.filename);
+		frame->file_len = ZSTR_LEN(func->op_array.filename);
+	}
+
+	/* Same rule as zend_get_executed_lineno(). */
+	if(EG(exception)
+		&& execute_data->opline->opcode == ZEND_HANDLE_EXCEPTION
+		&& execute_data->opline->lineno == 0
+		&& EG(opline_before_exception)
+	){
+		frame->line = EG(opline_before_exception)->lineno;
+	}
+	else
+	{
+		frame->line = execute_data->opline->lineno;
+	}
+}
+
+/*
+ * Dumps the stack from the innermost frame, whichever frame is selected, as
+ * [byte length] then per frame
+ * [file length][file\0][line][function length][function\0][class length][class\0][flags].
+ * Flag bit 0 marks the frame selected with vrzno_dbg_switch_frame(). The
+ * function is empty for top-level code and the class is empty outside a class.
+ *
+ * Frames are counted exactly as vrzno_dbg_switch_frame() counts them, so a
+ * frame's position in this dump is the index to switch to. Internal function
+ * frames are not listed, the innermost one included.
+ */
+char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_dump_frames(void)
+{
+	zend_execute_data *top = EG(current_execute_data);
+	zend_execute_data *execute_data;
+	vrzno_dbg_frame frame;
+	size_t len = 0;
+	int selected = 0;
+	int i;
+
+	if(phpdbg_restore_frame && PHPDBG_FRAME(num) > 0)
+	{
+		/* While a frame is selected, phpdbg keeps the real one here. */
+		top = PHPDBG_FRAME(execute_data);
+		selected = PHPDBG_FRAME(num);
+	}
+
+	/* The same starting frame as vrzno_dbg_switch_frame(). */
+	top = vrzno_dbg_user_frame(top);
+
+	for(execute_data = top; execute_data; execute_data = vrzno_dbg_caller(execute_data))
+	{
+		vrzno_dbg_read_frame(execute_data, &frame);
+
+		len += sizeof(size_t) + frame.file_len + 1
+			+ sizeof(size_t)
+			+ sizeof(size_t) + frame.function_len + 1
+			+ sizeof(size_t) + frame.class_len + 1
+			+ sizeof(size_t);
+	}
+
+	char *output = malloc(sizeof(len) + len);
+
+	if(!output)
+	{
+		return NULL;
+	}
+
+	char *cur = vrzno_dbg_put_word(output, len);
+
+	for(execute_data = top, i = 0; execute_data; execute_data = vrzno_dbg_caller(execute_data), i++)
+	{
+		vrzno_dbg_read_frame(execute_data, &frame);
+
+		cur = vrzno_dbg_put_string(cur, frame.file, frame.file_len);
+		cur = vrzno_dbg_put_word(cur, frame.line);
+		cur = vrzno_dbg_put_string(cur, frame.function, frame.function_len);
+		cur = vrzno_dbg_put_string(cur, frame.class_name, frame.class_len);
+		cur = vrzno_dbg_put_word(cur, i == selected ? 1 : 0);
+	}
+
+	return output;
+}
+
+/* Follows a symbol-table slot or reference to the value it holds. */
+static zval *vrzno_dbg_resolve(zval *zv)
+{
+	ZVAL_DEREF(zv);
+
+	if(Z_TYPE_P(zv) == IS_INDIRECT)
+	{
+		zv = Z_INDIRECT_P(zv);
+		ZVAL_DEREF(zv);
+	}
+
+	return zv;
+}
+
+/* The Zend type of the value: IS_UNDEF (0) for a variable not assigned yet. */
+int EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_type(zval *zv)
+{
+	return Z_TYPE_P(vrzno_dbg_resolve(zv));
+}
+
+/* Whether the variable is a PHP reference. */
+int EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_is_reference(zval *zv)
+{
+	if(Z_TYPE_P(zv) == IS_INDIRECT)
+	{
+		zv = Z_INDIRECT_P(zv);
+	}
+
+	return Z_ISREF_P(zv) ? 1 : 0;
+}
+
+/*
+ * The class name of an object, or NULL for anything else. Read it with
+ * vrzno_dbg_zval_class_length(): an anonymous class is named
+ * "class@anonymous", a NUL byte, then the file and line that declare it, so
+ * reading up to the first NUL gives every anonymous class the same name.
+ */
+const char* EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_class(zval *zv)
+{
+	zv = vrzno_dbg_resolve(zv);
+
+	return Z_TYPE_P(zv) == IS_OBJECT ? ZSTR_VAL(Z_OBJCE_P(zv)->name) : NULL;
+}
+
+/* Bytes in the class name of an object; 0 for anything else. */
+size_t EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_class_length(zval *zv)
+{
+	zv = vrzno_dbg_resolve(zv);
+
+	return Z_TYPE_P(zv) == IS_OBJECT ? ZSTR_LEN(Z_OBJCE_P(zv)->name) : 0;
+}
+
+/* Elements in an array or bytes in a string; -1 for anything else. */
+int EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_count(zval *zv)
+{
+	zv = vrzno_dbg_resolve(zv);
+
+	switch(Z_TYPE_P(zv))
+	{
+		case IS_ARRAY:
+			return (int) zend_hash_num_elements(Z_ARRVAL_P(zv));
+
+		case IS_STRING:
+			return (int) Z_STRLEN_P(zv);
+
+		default:
+			return -1;
+	}
+}
+
+/*
+ * Finds an array element or an object property by key, so a debugger can read
+ * the type of a value it reached through its parent: once such a value has
+ * been converted for JavaScript, an int and an integral float look the same.
+ * Property names are the ones the object's property table uses, so private and
+ * protected names carry their class prefix. Returns NULL when there is none.
+ */
+zval* EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_child(zval *zv, const char *key, size_t key_len)
+{
+	zv = vrzno_dbg_resolve(zv);
+
+	if(Z_TYPE_P(zv) == IS_ARRAY)
+	{
+		return zend_symtable_str_find(Z_ARRVAL_P(zv), key, key_len);
+	}
+
+	if(Z_TYPE_P(zv) == IS_OBJECT)
+	{
+		HashTable *properties = Z_OBJ_HT_P(zv)->get_properties(Z_OBJ_P(zv));
+
+		return properties ? zend_hash_str_find(properties, key, key_len) : NULL;
+	}
+
+	return NULL;
 }
