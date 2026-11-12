@@ -15,6 +15,37 @@ test('Vrzno phpinfo reports the extension version', async context => {
 	assert.ok(text.includes(`Version ${version}`), 'The phpinfo row must match phpversion("vrzno")');
 });
 
+test('JSON written for JavaScript leaves json_last_error() to the script', async context => {
+	const php = new PhpNode();
+	let stdout = '';
+	let stderr = '';
+	context.after(() => php.refresh());
+	php.addEventListener('output', event => event.detail.forEach(line => void (stdout += line)));
+	php.addEventListener('error', event => event.detail.forEach(line => void (stderr += line)));
+	await php.binary;
+
+	// The keys of a PHP object or array, and vrzno_run() arguments, cross to
+	// JavaScript as JSON. That encoding is Vrzno's, not the script's.
+	const exitCode = await php.r`<?php
+		$window = new Vrzno;
+		vrzno_eval('globalThis.__vrzno_ci_keys = value => Object.keys(value).join(",")');
+		vrzno_eval('globalThis.__vrzno_ci_count = (...values) => values.length');
+
+		json_decode('{');
+		var_dump(json_last_error() === JSON_ERROR_SYNTAX);
+
+		echo $window->__vrzno_ci_keys((object) ['first' => 1, 'second' => 2]), "\n";
+		echo $window->__vrzno_ci_keys(['third' => 3, 'fourth' => 4]), "\n";
+		echo vrzno_run('__vrzno_ci_count', [1, 2, 3]), "\n";
+
+		var_dump(json_last_error() === JSON_ERROR_SYNTAX);
+	`;
+
+	assert.equal(exitCode, 0);
+	assert.equal(stdout, 'bool(true)\nfirst,second\nthird,fourth\n3\nbool(true)\n');
+	assert.equal(stderr, '');
+});
+
 test('Vrzno extension smoke test', async () => {
 	const php = new PhpNode();
 	let stdout = '';

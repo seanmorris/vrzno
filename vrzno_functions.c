@@ -51,10 +51,7 @@ PHP_FUNCTION(vrzno_run)
 
 	smart_str buf = {0};
 
-	php_json_encoder  encoder;
-	php_json_encode_init(&encoder);
-	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
-	php_json_encode_zval(&buf, js_argv, opt, &encoder);
+	vrzno_json_encode(&buf, js_argv, opt);
 
 	smart_str_0(&buf);
 	char *js_args = ZSTR_VAL(buf.s);

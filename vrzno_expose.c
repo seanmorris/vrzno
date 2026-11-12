@@ -148,10 +148,7 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_object_keys(zend_object* zo)
 
 	smart_str buf = {0};
 
-	php_json_encoder  encoder;
-	php_json_encode_init(&encoder);
-	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
-	php_json_encode_zval(&buf, &keys, 0, &encoder);
+	vrzno_json_encode(&buf, &keys, 0);
 	smart_str_0(&buf);
 
 	char *json = malloc(ZSTR_LEN(buf.s) + 1);
@@ -184,10 +181,7 @@ char* EMSCRIPTEN_KEEPALIVE vrzno_expose_array_keys(zend_array *za)
 
 	smart_str buf = {0};
 
-	php_json_encoder  encoder;
-	php_json_encode_init(&encoder);
-	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
-	php_json_encode_zval(&buf, &keys, 0, &encoder);
+	vrzno_json_encode(&buf, &keys, 0);
 	smart_str_0(&buf);
 
 	char *json = malloc(ZSTR_LEN(buf.s) + 1);
