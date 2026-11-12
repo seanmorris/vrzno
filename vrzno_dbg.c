@@ -748,3 +748,29 @@ int EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_count(zval *zv)
 			return -1;
 	}
 }
+
+/*
+ * Finds an array element or an object property by key, so a debugger can read
+ * the type of a value it reached through its parent: once such a value has
+ * been converted for JavaScript, an int and an integral float look the same.
+ * Property names are the ones the object's property table uses, so private and
+ * protected names carry their class prefix. Returns NULL when there is none.
+ */
+zval* EMSCRIPTEN_KEEPALIVE vrzno_dbg_zval_child(zval *zv, const char *key, size_t key_len)
+{
+	zv = vrzno_dbg_resolve(zv);
+
+	if(Z_TYPE_P(zv) == IS_ARRAY)
+	{
+		return zend_symtable_str_find(Z_ARRVAL_P(zv), key, key_len);
+	}
+
+	if(Z_TYPE_P(zv) == IS_OBJECT)
+	{
+		HashTable *properties = Z_OBJ_HT_P(zv)->get_properties(Z_OBJ_P(zv));
+
+		return properties ? zend_hash_str_find(properties, key, key_len) : NULL;
+	}
+
+	return NULL;
+}

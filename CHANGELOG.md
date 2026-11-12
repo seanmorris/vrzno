@@ -8,6 +8,7 @@ All notable changes to Vrzno are documented in this file.
 - Add `vrzno_dbg_dump_frames()`: the stack from the innermost frame, whichever frame is selected, with each frame's file, line, function, class, and a flag for the selected frame. Frames are counted the way `vrzno_dbg_switch_frame()` counts them, so a frame's position is the index to switch to. `vrzno_dbg_dump_backtrace()` is unchanged.
 - `vrzno_dbg_switch_frame()` now skips internal function frames by function type. It tested the frame's opline for NULL, which PHP never sets on internal frames, so whether one was counted depended on leftover stack memory.
 - `vrzno_dbg_dump_symbols()` takes a scope instead of a bool: 0 for the current frame's variables and 1 for superglobals, as before, and 2 for every global variable, user-defined ones included.
+- Add `vrzno_dbg_zval_child()` to find an array element or object property by key, so the helpers below also work for values reached through a parent.
 - Add `vrzno_dbg_zval_type()`, `vrzno_dbg_zval_class()`, `vrzno_dbg_zval_count()`, and `vrzno_dbg_zval_is_reference()` so a debugger can show a value's PHP type, tell arrays from objects, and recognise a variable that has not been assigned yet.
 
 ## 0.2.0 - 2026-09-04
